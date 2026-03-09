@@ -452,6 +452,7 @@ const ENEMY_GLYPHS = {
 
 const BATTLE_EFFECT_LABELS = {
   attack: "进攻",
+  guard: "守势",
   hit: "受击",
   heal: "修复",
   shield: "护盾",
@@ -460,18 +461,22 @@ const BATTLE_EFFECT_LABELS = {
 };
 
 const BATTLE_EFFECT_DURATION_MS = {
-  attack: 440,
-  hit: 340,
-  heal: 520,
-  shield: 500,
-  "phase-shift": 620,
+  attack: 500,
+  guard: 560,
+  hit: 380,
+  heal: 620,
+  shield: 560,
+  "phase-shift": 700,
   defeat: 880,
 };
 
 const BATTLE_ARENA_EFFECT_DURATION_MS = {
-  impact: 280,
-  "phase-shift": 560,
-  "threat-surge": 620,
+  impact: 320,
+  "ally-drive": 500,
+  "enemy-drive": 540,
+  "intent-shift": 660,
+  "phase-shift": 620,
+  "threat-surge": 700,
 };
 
 const BATTLE_FLOAT_DURATION_MS = {
@@ -489,6 +494,13 @@ const BATTLE_FLOAT_X_OFFSETS = [0, -14, 14, -22, 22];
 const BOSS_THREAT_FEEDBACK_TEXT = {
   high: "威胁升高",
   extreme: "致命威胁",
+};
+
+const THREAT_INTENSITY_PCT = {
+  low: 30,
+  medium: 54,
+  high: 78,
+  extreme: 96,
 };
 
 const NODE_OPERATION_VISUALS = {
@@ -1120,6 +1132,31 @@ function getBattleArenaFxClass() {
     .join(" ");
 }
 
+function getThreatIntensityPct(threat) {
+  return THREAT_INTENSITY_PCT[threat] || THREAT_INTENSITY_PCT.medium;
+}
+
+function getBattleTempoClass(squad) {
+  if (!state.battle || !state.battle.fx) {
+    return "";
+  }
+
+  const now = Date.now();
+  const enemyTempo = getBattleUnitEffectEntries("enemy", ENEMY_STAGE_TARGET_ID, now).some((entry) =>
+    ["attack", "phase-shift"].includes(entry.effect)
+  );
+  if (enemyTempo) {
+    return "tempo-enemy";
+  }
+
+  const allyTempo = squad.some((agent) =>
+    getBattleUnitEffectEntries("ally", agent.id, now).some((entry) =>
+      ["attack", "guard", "heal", "phase-shift"].includes(entry.effect)
+    )
+  );
+  return allyTempo ? "tempo-allies" : "";
+}
+
 function renderBattleFloatingTexts(side, targetId) {
   if (!state.battle || !state.battle.fx) {
     return "";
@@ -1388,6 +1425,7 @@ function queueEnemyIntent(enemy) {
   };
 
   if (state.battle && state.battle.enemy === enemy) {
+    addBattleArenaEffect("intent-shift");
     applyBossThreatFeedback(enemy);
   }
 }
@@ -1842,6 +1880,7 @@ function executeEnemyTurn() {
 
   const enemy = state.battle.enemy;
   const intentId = enemy.intent.id;
+  addBattleArenaEffect("enemy-drive");
 
   if (intentId === "strike") {
     addBattleAttackCue("enemy", ENEMY_STAGE_TARGET_ID, "压制");
@@ -1979,7 +2018,7 @@ function executeSkill(actor) {
   if (actor.id === "seer") {
     const base = randInt(Math.max(1, actor.atk - 1), actor.atk + 1);
     const damage = calcPlayerDamage(actor, base);
-    addBattleAttackCue("ally", actor.id);
+    addBattleAttackCue("ally", actor.id, "锁定");
     applyDamageToEnemy(damage, actor.name);
     const exposeTurns = 2 + state.run.mods.tacticianExposeTurns;
     enemy.status.exposed = Math.max(enemy.status.exposed, exposeTurns);
@@ -1988,10 +2027,12 @@ function executeSkill(actor) {
   }
 
   if (actor.id === "bulwark") {
+    addBattleUnitEffect("ally", actor.id, "guard");
+    addBattleUnitEffect("ally", actor.id, "shield");
     actor.status.guard = Math.max(actor.status.guard, 2);
     actor.status.taunt = Math.max(actor.status.taunt, 2);
     actor.status.barrier += 3;
-    addBattleUnitEffect("ally", actor.id, "shield");
+    addBattleFloatingText("ally", actor.id, "shield", 0, "锚定");
     addBattleFloatingText("ally", actor.id, "shield", 3);
     addLog(`${actor.name}稳住前线（守势 + 嘲讽 + 护盾）。`);
     if (state.run.mods.vanguardBarrierAura) {
@@ -2008,7 +2049,9 @@ function executeSkill(actor) {
   if (actor.id === "ghost") {
     const hpRatio = enemy.hp / enemy.hpMax;
     let damage = calcPlayerDamage(actor, randInt(actor.atk + 3, actor.atk + 6));
-    addBattleAttackCue("ally", actor.id);
+    addBattleUnitEffect("ally", actor.id, "phase-shift");
+    addBattleAttackCue("ally", actor.id, "相位突袭");
+    addBattleFloatingText("ally", actor.id, "phase", 0, "相位");
     if (enemy.status.exposed > 0) {
       damage += 2;
     }
@@ -2026,6 +2069,8 @@ function executeSkill(actor) {
       return;
     }
 
+    addBattleUnitEffect("ally", actor.id, "heal");
+    addBattleFloatingText("ally", actor.id, "heal", 0, "修补波");
     const healAmount = 6 + state.run.mods.supportHealBonus;
     const beforeHp = target.hp;
     target.hp = Math.min(target.hpMax, target.hp + healAmount);
@@ -2087,7 +2132,8 @@ function performAction(actionType) {
   const squadHpBeforeEnemyTurn = getTotalSquadHp();
 
   if (actionType === "attack") {
-    addBattleAttackCue("ally", actor.id);
+    addBattleArenaEffect("ally-drive");
+    addBattleAttackCue("ally", actor.id, "突击");
     const base = randInt(Math.max(1, actor.atk - 1), actor.atk + 1);
     const damage = calcPlayerDamage(actor, base);
     applyDamageToEnemy(damage, actor.name);
@@ -2095,6 +2141,8 @@ function performAction(actionType) {
   }
 
   if (actionType === "defend") {
+    addBattleArenaEffect("ally-drive");
+    addBattleUnitEffect("ally", actor.id, "guard");
     addBattleUnitEffect("ally", actor.id, "shield");
     addBattleFloatingText("ally", actor.id, "shield", 0, "守势");
     actor.status.guard = Math.max(actor.status.guard, 1);
@@ -2117,12 +2165,8 @@ function performAction(actionType) {
       render();
       return;
     }
+    addBattleArenaEffect("ally-drive");
     actor.energy -= cost;
-    if (actor.id === "loom") {
-      addBattleUnitEffect("ally", actor.id, "heal");
-    } else if (actor.id === "bulwark") {
-      addBattleUnitEffect("ally", actor.id, "shield");
-    }
     executeSkill(actor);
   }
 
@@ -2133,6 +2177,7 @@ function performAction(actionType) {
       render();
       return;
     }
+    addBattleArenaEffect("ally-drive");
     actor.energy -= cost;
     addBattleAttackCue("ally", actor.id, "爆发");
     const base = randInt(actor.atk + 4, actor.atk + 8);
@@ -2435,10 +2480,13 @@ function renderIntentSequenceTrack(enemy, count = 4) {
       ${ids
         .map((intentId, index) => {
           const isCurrent = index === 0 ? "current" : "";
+          const threat = INTENT_META[intentId] ? INTENT_META[intentId].threat : "medium";
+          const tick = index === 0 ? "当前" : `+${index}`;
           return `
-            <span class="intent-step ${isCurrent}">
+            <span class="intent-step ${isCurrent} intent-step-${threat}">
               <span class="intent-step-icon">${getIntentIcon(intentId)}</span>
               <span class="intent-step-label">${getIntentLabel(intentId)}</span>
+              <span class="intent-step-tick">${tick}</span>
             </span>
           `;
         })
@@ -2527,12 +2575,16 @@ function renderBattleStage(squad, enemy, selectedActorId, intentThreat = "medium
   const bossClass = enemy.bossState ? "boss-encounter" : "";
   const phaseClass = enemy.bossState ? `boss-phase-${enemy.bossState.phase}` : "";
   const centerLabel = enemy.bossState ? "BOSS" : "VS";
-  const threatLabel = getThreatLabel(intentThreat || "medium");
-  const threatClass = `battle-threat-${intentThreat || "medium"}`;
+  const threatKey = intentThreat || "medium";
+  const threatLabel = getThreatLabel(threatKey);
+  const threatClass = `battle-threat-${threatKey}`;
+  const threatIntensity = getThreatIntensityPct(threatKey);
+  const stageTempoClass = getBattleTempoClass(squad);
+  const intentEcho = enemy.intent ? `${getIntentIcon(enemy.intent.id)} ${enemy.intent.label}` : "例程未知";
   const enemyLaneLabel = enemy.bossState ? "主核压制" : "敌方链路";
 
   return `
-    <article class="battle-stage panel panel-visual ${arenaFxClass} ${bossClass} ${phaseClass}">
+    <article class="battle-stage panel panel-visual ${arenaFxClass} ${bossClass} ${phaseClass} ${threatClass} ${stageTempoClass}">
       <div class="battle-stage-head" aria-hidden="true">
         <span class="battle-lane-tag allies">友军链路 · ${squad.length}</span>
         <span class="battle-lane-tag enemy">${enemyLaneLabel}</span>
@@ -2546,6 +2598,10 @@ function renderBattleStage(squad, enemy, selectedActorId, intentThreat = "medium
         <div class="battle-stage-center" aria-hidden="true">
           <strong>${centerLabel}</strong>
           <small class="${threatClass}">威胁 ${threatLabel}</small>
+          <span class="battle-threat-lane">
+            <span class="battle-threat-fill" style="width:${threatIntensity}%"></span>
+          </span>
+          <span class="battle-intent-echo">${intentEcho}</span>
         </div>
         <div class="battle-lane enemy">${renderEnemyBattlePuppet(enemy)}</div>
       </div>
@@ -3024,7 +3080,7 @@ function renderBattle() {
           : ""
       }
 
-      <article class="intent-card panel-visual">
+      <article class="intent-card panel-visual intent-card-${enemy.intent.threat || "medium"}">
         <div class="row spread">
           <h3>敌方意图：${enemy.intent.label}</h3>
           <span class="intent-icon-badge">${intentIcon}</span>
@@ -3033,7 +3089,7 @@ function renderBattle() {
         <div class="chip-row">
           <span class="chip ${intentThreatClass}">威胁 ${getThreatLabel(enemy.intent.threat || "medium")}</span>
           <span class="chip">可能目标：${intentTarget}</span>
-          <span class="chip">效果预估：${intentForecast}</span>
+          <span class="chip intent-forecast-chip">效果预估：${intentForecast}</span>
         </div>
         ${renderIntentSequenceTrack(enemy, 4)}
       </article>
@@ -3130,12 +3186,12 @@ function renderBattle() {
       }
 
       <div class="actions">
-        <button class="btn primary" data-action="do-attack" ${actionLocked ? "disabled" : ""}>攻击（+1 能量）</button>
-        <button class="btn" data-action="do-defend" ${actionLocked ? "disabled" : ""}>防御（+1 能量）</button>
-        <button class="btn" data-action="do-skill" ${skillDisabled ? "disabled" : ""}>${
+        <button class="btn primary action-btn attack" data-action="do-attack" ${actionLocked ? "disabled" : ""}>攻击（+1 能量）</button>
+        <button class="btn action-btn guard" data-action="do-defend" ${actionLocked ? "disabled" : ""}>防御（+1 能量）</button>
+        <button class="btn action-btn skill" data-action="do-skill" ${skillDisabled ? "disabled" : ""}>${
           actor ? actor.skill.title : "技能"
         }（-${skillCost} 能量）</button>
-        <button class="btn" data-action="do-burst" ${burstDisabled ? "disabled" : ""}>同步爆发（-3 能量）</button>
+        <button class="btn action-btn burst" data-action="do-burst" ${burstDisabled ? "disabled" : ""}>同步爆发（-3 能量）</button>
       </div>
 
       <p style="margin-top:12px;">当前操控：<strong>${actor ? actor.name : "无"}</strong></p>
