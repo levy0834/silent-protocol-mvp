@@ -306,7 +306,15 @@ const state = {
   lastBattleResult: null,
   lastTransition: null,
   runResult: null,
-  log: ["系统待机中，等待协议启动。"],
+  logCursor: 1,
+  log: [
+    {
+      id: 1,
+      phase: "system",
+      tone: "neutral",
+      text: "系统待机中，等待协议启动。",
+    },
+  ],
 };
 
 const screenRoot = document.getElementById("screen-root");
@@ -354,6 +362,23 @@ const THREAT_DIRECTIVES = {
   medium: "准备承伤",
   high: "优先防御",
   extreme: "立即减伤",
+};
+
+const OUTER_LOOP_STEPS = [
+  { id: "prepare", label: "节点准备", hint: "编组小队并锁定协议" },
+  { id: "battle", label: "节点战斗", hint: "执行回合对抗" },
+  { id: "reward", label: "指令奖励", hint: "安装构筑强化" },
+  { id: "advance", label: "推进下一节点", hint: "完成链路衔接" },
+];
+
+const LOG_PHASE_META = {
+  system: { label: "系统" },
+  squad: { label: "编组" },
+  node: { label: "节点" },
+  battle: { label: "战斗" },
+  reward: { label: "奖励" },
+  transition: { label: "衔接" },
+  result: { label: "结算" },
 };
 
 const ROLE_VISUALS = {
@@ -698,6 +723,54 @@ function getRunPhaseLabel(screen = state.screen) {
   return "待机";
 }
 
+function getDefaultLogPhase(screen = state.screen) {
+  if (screen === "squad") {
+    return "squad";
+  }
+  if (screen === "battle") {
+    return "battle";
+  }
+  if (screen === "reward") {
+    return "reward";
+  }
+  if (screen === "run-end") {
+    return "result";
+  }
+  return "system";
+}
+
+function normalizeLogEntry(entry, fallbackId = 0) {
+  if (!entry) {
+    return {
+      id: fallbackId,
+      phase: "system",
+      tone: "neutral",
+      text: "",
+    };
+  }
+
+  if (typeof entry === "string") {
+    return {
+      id: fallbackId,
+      phase: "system",
+      tone: "neutral",
+      text: entry,
+    };
+  }
+
+  const tone = ["neutral", "info", "success", "warn", "alert"].includes(entry.tone)
+    ? entry.tone
+    : "neutral";
+  const phase = entry.phase && LOG_PHASE_META[entry.phase] ? entry.phase : "system";
+
+  return {
+    id: Number.isFinite(entry.id) ? entry.id : fallbackId,
+    phase,
+    tone,
+    text: entry.text || "",
+  };
+}
+
 function getRoleVisual(role) {
   return (
     ROLE_VISUALS[role] || {
@@ -798,8 +871,32 @@ function renderRewardGlyph(rewardId) {
   `;
 }
 
-function addLog(text) {
-  state.log.unshift(text);
+function addLog(text, options = {}) {
+  const payload =
+    typeof text === "string"
+      ? {
+          text,
+          ...options,
+        }
+      : text;
+
+  if (!payload || !payload.text) {
+    return;
+  }
+
+  const phase = payload.phase && LOG_PHASE_META[payload.phase]
+    ? payload.phase
+    : getDefaultLogPhase();
+  const tone = ["neutral", "info", "success", "warn", "alert"].includes(payload.tone)
+    ? payload.tone
+    : "neutral";
+  state.logCursor = (state.logCursor || 0) + 1;
+  state.log.unshift({
+    id: state.logCursor,
+    phase,
+    tone,
+    text: payload.text,
+  });
   state.log = state.log.slice(0, CONFIG.logSize);
   renderLog();
 }
@@ -1473,7 +1570,7 @@ function selectNodeOperation(operationId) {
   plan.selectedId = operationId;
   const operation = getNodeOperationById(operationId);
   if (operation) {
-    addLog(`已选择节点协议：${operation.title}。`);
+    addLog(`已选择节点协议：${operation.title}。`, { phase: "node", tone: "info" });
   }
   render();
 }
@@ -1489,7 +1586,8 @@ function startRun() {
   state.runResult = null;
   state.screen = "squad";
   state.log = [];
-  addLog("行动已开始，请为第 1 节点编成小队。");
+  state.logCursor = 0;
+  addLog("行动已开始，请为第 1 节点编成小队。", { phase: "node", tone: "info" });
   render();
 }
 
@@ -1502,7 +1600,9 @@ function abortRun() {
   state.lastBattleResult = null;
   state.lastTransition = null;
   state.runResult = null;
-  state.log = ["协议已重置，等待新的行动。"];
+  state.log = [];
+  state.logCursor = 0;
+  addLog("协议已重置，等待新的行动。", { phase: "system", tone: "neutral" });
   render();
 }
 
@@ -1519,7 +1619,10 @@ function toggleSquadAgent(agentId, checked) {
   if (checked) {
     if (!state.run.squadIds.includes(agentId)) {
       if (state.run.squadIds.length >= CONFIG.maxSquadSize) {
-        addLog(`小队上限为 ${CONFIG.maxSquadSize} 人，请先取消一名特工。`);
+        addLog(`小队上限为 ${CONFIG.maxSquadSize} 人，请先取消一名特工。`, {
+          phase: "squad",
+          tone: "warn",
+        });
         render();
         return;
       }
@@ -1637,7 +1740,10 @@ function handleBossPhaseShift(enemy) {
     addBattleArenaEffect("phase-shift");
     addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "phase", 0, "阶段 2");
     addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "shield", 4);
-    addLog(`${enemy.name}进入第 2 阶段：封锁例程上线（攻击 +1，装甲 +4）。`);
+    addLog(`${enemy.name}进入第 2 阶段：封锁例程上线（攻击 +1，装甲 +4）。`, {
+      phase: "battle",
+      tone: "alert",
+    });
     queueEnemyIntent(enemy);
     return;
   }
@@ -1654,7 +1760,10 @@ function handleBossPhaseShift(enemy) {
     addBattleArenaEffect("phase-shift");
     addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "phase", 0, "阶段 3");
     addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "shield", 2);
-    addLog(`${enemy.name}进入第 3 阶段：湮灭循环上线（攻击 +2，充能 +2，装甲 +2）。`);
+    addLog(`${enemy.name}进入第 3 阶段：湮灭循环上线（攻击 +2，充能 +2，装甲 +2）。`, {
+      phase: "battle",
+      tone: "alert",
+    });
     queueEnemyIntent(enemy);
   }
 }
@@ -1723,7 +1832,7 @@ function deployBattle() {
 
   const nodeOperationPlan = ensureNodeOperationPlan();
   if (!nodeOperationPlan || !nodeOperationPlan.selectedId) {
-    addLog("部署前必须先选择一个节点协议。");
+    addLog("部署前必须先选择一个节点协议。", { phase: "squad", tone: "warn" });
     render();
     return;
   }
@@ -1771,16 +1880,19 @@ function deployBattle() {
     addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "phase-shift");
     addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "phase", 0, "主核接入");
     applyBossThreatFeedback(enemy);
-    addLog(`${enemy.name}展开主核压制场，战斗压力提升。`);
+    addLog(`${enemy.name}展开主核压制场，战斗压力提升。`, { phase: "battle", tone: "alert" });
   }
 
   const node = getCurrentNode();
-  addLog(`第 ${state.run.nodeIndex + 1} 节点开始：${node.label}（${getDangerLabel(node.danger)}）。`);
+  addLog(`第 ${state.run.nodeIndex + 1} 节点开始：${node.label}（${getDangerLabel(node.danger)}）。`, {
+    phase: "node",
+    tone: "info",
+  });
   if (selectedOperation) {
-    addLog(`协议生效：${selectedOperation.title}。`);
-    operationEffects.forEach((line) => addLog(line));
+    addLog(`协议生效：${selectedOperation.title}。`, { phase: "battle", tone: "info" });
+    operationEffects.forEach((line) => addLog(line, { phase: "battle", tone: "info" }));
   }
-  addLog(`${enemy.name}已接敌，意图：${enemy.intent.label}。`);
+  addLog(`${enemy.name}已接敌，意图：${enemy.intent.label}。`, { phase: "battle", tone: "info" });
   render();
 }
 
@@ -2372,7 +2484,10 @@ function beginBattleVictoryFlow(actor, actionLabel, playerDamage) {
   battleState.decisionReadyUntil = 0;
   addBattleArenaEffect("victory-pulse");
   addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "phase", 0, "节点清除");
-  addLog(`${battleState.enemy.name}已崩解，战场控制权已夺取。`);
+  addLog(`${battleState.enemy.name}已崩解，战场控制权已夺取。`, {
+    phase: "battle",
+    tone: "success",
+  });
   render();
 
   const transitionPayload = {
@@ -2455,7 +2570,10 @@ function performAction(actionType) {
   if (actionType === "skill") {
     const cost = getSkillCost(actor);
     if (actor.energy < cost) {
-      addLog(`${actor.name}能量不足，无法施放${actor.skill.title}。`);
+      addLog(`${actor.name}能量不足，无法施放${actor.skill.title}。`, {
+        phase: "battle",
+        tone: "warn",
+      });
       render();
       return;
     }
@@ -2468,7 +2586,10 @@ function performAction(actionType) {
   if (actionType === "burst") {
     const cost = 3;
     if (actor.energy < cost) {
-      addLog(`${actor.name}能量不足，无法施放同步爆发。`);
+      addLog(`${actor.name}能量不足，无法施放同步爆发。`, {
+        phase: "battle",
+        tone: "warn",
+      });
       render();
       return;
     }
@@ -2543,7 +2664,10 @@ function applyPostBattleRecovery() {
   });
 
   if (totalRecovered > 0) {
-    addLog(`自动修复共为小队恢复了 ${totalRecovered} 点生命。`);
+    addLog(`自动修复共为小队恢复了 ${totalRecovered} 点生命。`, {
+      phase: "transition",
+      tone: "success",
+    });
   }
   return totalRecovered;
 }
@@ -2556,13 +2680,13 @@ function endRun(result, reason) {
   state.lastTransition = null;
 
   if (reason) {
-    addLog(reason);
+    addLog(reason, { phase: "result", tone: "alert" });
   }
 
   if (result === "victory") {
-    addLog("寂静核心已被中和，行动成功。");
+    addLog("寂静核心已被中和，行动成功。", { phase: "result", tone: "success" });
   } else {
-    addLog("行动失败。");
+    addLog("行动失败。", { phase: "result", tone: "alert" });
   }
 
   render();
@@ -2619,7 +2743,7 @@ function onBattleWin(victoryPayload = null) {
   state.screen = "reward";
   clearCurrentBattleFx();
   state.battle = null;
-  addLog("遭遇战已清除，请选择一项指令奖励。");
+  addLog("遭遇战已清除，请选择一项指令奖励。", { phase: "reward", tone: "success" });
   render();
 }
 
@@ -2643,7 +2767,7 @@ function applyReward(rewardId) {
     state.run.upgrades.push({ id: reward.id, title: reward.title });
   }
 
-  addLog(`已安装指令：${reward.title}。`);
+  addLog(`已安装指令：${reward.title}。`, { phase: "reward", tone: "success" });
 
   const previousNodeNum = state.run.nodeIndex + 1;
   const previousTransition = state.lastTransition;
@@ -2665,7 +2789,10 @@ function applyReward(rewardId) {
   state.screen = "squad";
   const nextNode = getCurrentNode();
   if (nextNode) {
-    addLog(`链路推进至第 ${nextNodeNum} 节点：${nextNode.label}。`);
+    addLog(`链路推进至第 ${nextNodeNum} 节点：${nextNode.label}。`, {
+      phase: "transition",
+      tone: "info",
+    });
   }
   render();
 }
@@ -3031,6 +3158,144 @@ function renderStageProgress(activeIndex, clearedCount = 0) {
   `;
 }
 
+function getOuterLoopStatuses(view, transitionCompleted = false) {
+  const statuses = {
+    prepare: "upcoming",
+    battle: "upcoming",
+    reward: "upcoming",
+    advance: "upcoming",
+  };
+
+  if (view === "battle") {
+    statuses.prepare = "complete";
+    statuses.battle = "active";
+    return statuses;
+  }
+
+  if (view === "reward") {
+    statuses.prepare = "complete";
+    statuses.battle = "complete";
+    statuses.reward = "active";
+    return statuses;
+  }
+
+  statuses.prepare = "active";
+  if (transitionCompleted) {
+    statuses.battle = "complete";
+    statuses.reward = "complete";
+    statuses.advance = "complete";
+  }
+
+  return statuses;
+}
+
+function renderOuterLoopRail(view, options = {}) {
+  const statuses = getOuterLoopStatuses(view, Boolean(options.transitionCompleted));
+  const phaseText = options.phaseText || "";
+  const hintText = options.hintText || "";
+
+  return `
+    <article class="panel panel-visual loop-rail">
+      <div class="row spread">
+        <h3>行动外环</h3>
+        ${phaseText ? `<span class="chip loop-phase-chip">${phaseText}</span>` : ""}
+      </div>
+      <div class="loop-track" aria-label="行动外环流程">
+        ${OUTER_LOOP_STEPS.map((step, index) => {
+          const status = statuses[step.id] || "upcoming";
+          const statusClass = `is-${status}`;
+          const statusText = status === "active" ? step.hint : status === "complete" ? "已完成" : "待执行";
+          return `
+            <span class="loop-step ${statusClass}">
+              <small>${index + 1}</small>
+              <strong>${step.label}</strong>
+              <em>${statusText}</em>
+            </span>
+          `;
+        }).join("")}
+      </div>
+      ${hintText ? `<p class="muted loop-hint">${hintText}</p>` : ""}
+    </article>
+  `;
+}
+
+function renderFlowChain(fromNodeIndex, toNodeIndex, rewardTitle = "") {
+  const fromNode = Math.max(1, fromNodeIndex || 1);
+  const toNode = Math.max(fromNode, toNodeIndex || fromNode);
+  const rewardStep = rewardTitle ? `安装 ${rewardTitle}` : "选择节点奖励";
+  const rewardClass = rewardTitle ? "complete" : "pending";
+
+  return `
+    <div class="flow-chain" aria-label="节点衔接链路">
+      <span class="flow-step complete">节点 ${fromNode} 战斗</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step ${rewardClass}">${rewardStep}</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step active">节点 ${toNode} 准备</span>
+    </div>
+  `;
+}
+
+function renderDeployChecklist(selectedOperation, deployedAliveCount, aliveCount) {
+  const checks = [
+    {
+      label: "协议锁定",
+      done: Boolean(selectedOperation),
+      detail: selectedOperation ? selectedOperation.title : "未锁定",
+    },
+    {
+      label: "部署人数",
+      done: deployedAliveCount > 0,
+      detail: `${deployedAliveCount}/${CONFIG.maxSquadSize}`,
+    },
+    {
+      label: "可行动特工",
+      done: aliveCount > 0,
+      detail: `${aliveCount} 存活`,
+    },
+  ];
+
+  return `
+    <div class="deploy-checklist">
+      ${checks.map((item) => `
+        <article class="deploy-check-item ${item.done ? "done" : "pending"}">
+          <small>${item.label}</small>
+          <strong>${item.detail}</strong>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderSquadRosterDigest(squad) {
+  const slots = Array.from({ length: CONFIG.maxSquadSize }, (_, index) => squad[index] || null);
+
+  return `
+    <div class="squad-digest-grid">
+      ${slots.map((agent, index) => {
+        if (!agent) {
+          return `
+            <article class="squad-digest-card empty">
+              <small>部署位 ${index + 1}</small>
+              <strong>空位</strong>
+              <p>可在下方勾选特工补齐</p>
+            </article>
+          `;
+        }
+
+        const roleVisual = getRoleVisual(agent.role);
+        return `
+          <article class="squad-digest-card filled" style="--digest-accent:${roleVisual.color}; --digest-soft:${roleVisual.soft};">
+            <small>部署位 ${index + 1}</small>
+            <strong>${agent.name}</strong>
+            <p>${getRoleLabel(agent.role)} · HP ${agent.hp}/${agent.hpMax}</p>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function renderBossPhaseReference(bossTemplate) {
   if (!bossTemplate || !bossTemplate.phasePatterns) {
     return "";
@@ -3285,7 +3550,28 @@ function renderHeader() {
 }
 
 function renderLog() {
-  logList.innerHTML = state.log.map((line) => `<li>${line}</li>`).join("");
+  if (!Array.isArray(state.log) || state.log.length === 0) {
+    logList.innerHTML = '<li class="log-entry empty"><p>暂无行动记录。</p></li>';
+    return;
+  }
+
+  logList.innerHTML = state.log
+    .map((rawEntry, index) => {
+      const fallbackId = Math.max(1, (state.logCursor || 0) - index);
+      const entry = normalizeLogEntry(rawEntry, fallbackId);
+      const phaseLabel = LOG_PHASE_META[entry.phase] ? LOG_PHASE_META[entry.phase].label : "系统";
+
+      return `
+        <li class="log-entry phase-${entry.phase} tone-${entry.tone}">
+          <div class="log-entry-head">
+            <span class="log-phase-chip">${phaseLabel}</span>
+            <span class="log-seq">#${entry.id}</span>
+          </div>
+          <p>${entry.text}</p>
+        </li>
+      `;
+    })
+    .join("");
 }
 
 function renderTitle() {
@@ -3358,6 +3644,14 @@ function renderSquad() {
         .join("")
     : "";
   const bossTemplate = getNodeBossDossier(node);
+  const stagedSquad = getBattleSquadRoster();
+  const transitionCompleted = Boolean(transitionDigest && transitionDigest.rewardTitle);
+  const loopPhaseText = transitionCompleted
+    ? `节点 ${state.run.nodeIndex + 1} 已接入`
+    : `节点 ${state.run.nodeIndex + 1} 待部署`;
+  const loopHintText = transitionCompleted
+    ? "上一节点已完成奖励衔接，确认编组后可直接进入下一战。"
+    : "先锁定节点协议，再确认部署位后进入战斗。";
 
   screenRoot.innerHTML = `
     <section class="squad-screen">
@@ -3365,6 +3659,12 @@ function renderSquad() {
         <h2 class="screen-title">小队编成</h2>
         <small>已选 ${state.run.squadIds.length}/${CONFIG.maxSquadSize}</small>
       </div>
+
+      ${renderOuterLoopRail("squad", {
+        transitionCompleted,
+        phaseText: loopPhaseText,
+        hintText: loopHintText,
+      })}
 
       <article class="panel panel-visual stage-panel" style="margin-bottom:12px;">
         <div class="row spread">
@@ -3381,6 +3681,8 @@ function renderSquad() {
           </span>
           ${threatLabels}
         </div>
+        ${renderDeployChecklist(selectedOperation, deployedAliveCount, aliveCount)}
+        ${renderSquadRosterDigest(stagedSquad)}
         <div class="node-brief-grid">
           <article class="node-brief-item">
             <small>节点压力</small>
@@ -3406,7 +3708,12 @@ function renderSquad() {
             <h3>节点衔接回执</h3>
             <span class="chip">来自节点 ${transitionDigest.fromNodeIndex} · ${transitionDigest.fromNodeLabel}</span>
           </div>
-          <p>${transitionDigest.enemyName} 已清除，链路保持稳定并推进到下一节点。</p>
+          <p>${transitionDigest.enemyName} 已清除，终结动作为「${transitionDigest.actionLabel}」。</p>
+          ${renderFlowChain(
+            transitionDigest.fromNodeIndex,
+            transitionDigest.toNodeIndex,
+            transitionDigest.rewardTitle
+          )}
           <div class="chip-row">
             <span class="chip">终结动作：${transitionDigest.actionLabel}</span>
             <span class="chip">战后修复 ${transitionDigest.recoveredHp > 0 ? `+${transitionDigest.recoveredHp}` : "0"}</span>
@@ -3592,6 +3899,10 @@ function renderBattle() {
         </div>
       </div>
       ${renderStageProgress(state.run.nodeIndex, state.run.nodeIndex)}
+      ${renderOuterLoopRail("battle", {
+        phaseText: `节点 ${state.run.nodeIndex + 1} 交战中`,
+        hintText: "完成当前节点后将进入指令奖励阶段。",
+      })}
 
       ${
         activeNodeOperation
@@ -3782,6 +4093,10 @@ function renderReward() {
         <p>进入下一节点前，选择并安装一项升级指令。候选指令将按序解码。</p>
         ${renderStageProgress(state.run.nodeIndex + 1, state.run.nodeIndex + 1)}
       </article>
+      ${renderOuterLoopRail("reward", {
+        phaseText: `节点 ${state.run.nodeIndex + 1} 已清除`,
+        hintText: `安装 1 项指令后推进到节点 ${state.run.nodeIndex + 2}。`,
+      })}
       ${
         battleResult
           ? `
@@ -3790,7 +4105,8 @@ function renderReward() {
           <h3>战场回执</h3>
           <span class="chip">节点 ${battleResult.nodeIndex} · ${battleResult.nodeLabel}</span>
         </div>
-        <p>${battleResult.enemyName} 已被清除，结算链路稳定。</p>
+        <p>${battleResult.enemyName} 已被清除，当前流程进入奖励解码。</p>
+        ${renderFlowChain(battleResult.nodeIndex, battleResult.nodeIndex + 1, "")}
         <div class="chip-row">
           ${battleResult.actorName ? `<span class="chip">执行者 ${battleResult.actorName}</span>` : ""}
           <span class="chip">终结动作：${battleResult.actionLabel}</span>
