@@ -2499,6 +2499,7 @@ function renderAllyBattlePuppet(agent, isSelected) {
   const roleVisual = getRoleVisual(agent.role);
   const glyph = AGENT_GLYPHS[agent.id] || '<circle cx="48" cy="48" r="12" fill="#eaf8ff"/>';
   const hpPct = clamp(Math.round((agent.hp / Math.max(1, agent.hpMax)) * 100), 0, 100);
+  const roleLabel = getRoleLabel(agent.role);
   const selectedClass = isSelected ? "selected" : "";
   const defeatedClass = agent.hp <= 0 ? "defeated" : "";
   const fxClass = getBattleUnitFxClass("ally", agent.id);
@@ -2523,7 +2524,8 @@ function renderAllyBattlePuppet(agent, isSelected) {
       ${renderBattleEffectTags("ally", agent.id)}
       <div class="battle-puppet-meta">
         <strong>${agent.name}</strong>
-        <small>HP ${agent.hp}/${agent.hpMax}</small>
+        <small class="battle-puppet-role">${roleLabel}</small>
+        <small class="battle-puppet-vitals">HP ${agent.hp}/${agent.hpMax}</small>
         <span class="battle-mini-hp"><span style="width:${hpPct}%"></span></span>
       </div>
     </div>
@@ -2563,7 +2565,8 @@ function renderEnemyBattlePuppet(enemy) {
       ${coreBadge}
       <div class="battle-puppet-meta enemy">
         <strong>${enemy.name}</strong>
-        <small>HP ${enemy.hp}/${enemy.hpMax}</small>
+        <small class="battle-puppet-role enemy">${enemy.role}</small>
+        <small class="battle-puppet-vitals">HP ${enemy.hp}/${enemy.hpMax}</small>
         <span class="battle-mini-hp enemy"><span style="width:${hpPct}%"></span></span>
       </div>
     </div>
@@ -2581,18 +2584,26 @@ function renderBattleStage(squad, enemy, selectedActorId, intentThreat = "medium
   const threatIntensity = getThreatIntensityPct(threatKey);
   const stageTempoClass = getBattleTempoClass(squad);
   const intentEcho = enemy.intent ? `${getIntentIcon(enemy.intent.id)} ${enemy.intent.label}` : "例程未知";
-  const enemyLaneLabel = enemy.bossState ? "主核压制" : "敌方链路";
+  const enemyLaneLabel = enemy.bossState ? "敌方主核" : "敌方单位";
 
   return `
     <article class="battle-stage panel panel-visual ${arenaFxClass} ${bossClass} ${phaseClass} ${threatClass} ${stageTempoClass}">
       <div class="battle-stage-head" aria-hidden="true">
-        <span class="battle-lane-tag allies">友军链路 · ${squad.length}</span>
+        <span class="battle-lane-tag allies">我方小队 · ${squad.length} 单位</span>
+        <span class="battle-stage-focus">正面对峙</span>
         <span class="battle-lane-tag enemy">${enemyLaneLabel}</span>
       </div>
       <div class="battle-stage-grid">
         <div class="battle-lane allies">
           ${squad
-            .map((agent) => renderAllyBattlePuppet(agent, selectedActorId === agent.id))
+            .map(
+              (agent, index) => `
+                <div class="battle-slot ally-slot">
+                  <span class="battle-slot-label">我方 ${index + 1}</span>
+                  ${renderAllyBattlePuppet(agent, selectedActorId === agent.id)}
+                </div>
+              `
+            )
             .join("")}
         </div>
         <div class="battle-stage-center" aria-hidden="true">
@@ -2603,7 +2614,12 @@ function renderBattleStage(squad, enemy, selectedActorId, intentThreat = "medium
           </span>
           <span class="battle-intent-echo">${intentEcho}</span>
         </div>
-        <div class="battle-lane enemy">${renderEnemyBattlePuppet(enemy)}</div>
+        <div class="battle-lane enemy">
+          <div class="battle-slot enemy-slot">
+            <span class="battle-slot-label enemy">${enemy.bossState ? "主核目标" : "敌方目标"}</span>
+            ${renderEnemyBattlePuppet(enemy)}
+          </div>
+        </div>
       </div>
     </article>
   `;
