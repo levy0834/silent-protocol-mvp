@@ -1,103 +1,88 @@
-# Silent Protocol MVP - Current Design Snapshot
+# 寂静协议 原型版 - 设计快照
 
-## 1) Scope
-**Goal:** keep a fast, static, local playable demo while making the run feel closer to AGI roguelite squad tactics.
+## 1. 设计目标
+在“纯静态、本地可跑、快速可玩”的约束下，做出一条可反复游玩的短局战术循环：
+- 每局时长短，反馈密度高。
+- 角色职责清晰，操作成本低。
+- 每节点提供一次轻策略决策。
+- 不引入后端与重型系统。
 
-**Still constrained by MVP rules:**
-- No backend
-- Plain JS + DOM
-- Small code surface
-- Placeholder visual style
+## 2. 核心循环
+1. 开始行动。
+2. 小队编成（4 选最多 3）。
+3. 选择节点协议（风险/收益修正）。
+4. 部署并进入战斗。
+5. 依据敌方意图执行战术动作。
+6. 胜利后自动修复并选择 1 个指令奖励。
+7. 进入下一节点，重复以上流程。
+8. 击败第 4 节点首领后结算胜利。
 
-## 2) Core Gameplay Loop (Current)
-1. Start run
-2. Assemble squad (pick up to 3 from 4 agents)
-3. Choose one **Node Protocol** risk/reward modifier
-4. Deploy to current node
-5. Battle with role actions + enemy intent pressure
-6. On win, apply auto-repair and choose 1 directive reward
-7. Repeat through 4-node path
-8. Defeat boss node for run victory
+## 3. 遭遇结构
+- 节点 1：遭遇战（入门压力）。
+- 节点 2：遭遇战（扰动增强）。
+- 节点 3：精英战（数值与意图压力提升）。
+- 节点 4：首领战（协议主核）。
 
-## 3) Encounter Structure
-- Node 1: `Skirmish` (intro pressure)
-- Node 2: `Skirmish` (higher disruption)
-- Node 3: `Elite` (higher stat + intent pressure)
-- Node 4: `Boss` (`Protocol Prime`)
+每个节点在部署前展示可能出现的敌方原型，降低盲猜成本。
 
-Each node announces likely enemy archetypes before deployment.
+## 4. 角色定位
+- 战术型：施加“破绽”，放大队伍输出。
+- 先锋型：构建前线（守势、嘲讽、护盾）。
+- 游击型：高爆发处决，低血目标终结能力强。
+- 支援型：治疗与护盾续航，可通过奖励提升解控能力。
 
-## 4) Squad & Role Identity
-Agents now have distinct role kits:
-- `Tactician`:
-  - Skill applies `Exposed` to amplify squad damage
-- `Vanguard`:
-  - Skill creates frontline (`Guard`, `Taunt`, `Barrier`)
-- `Skirmisher`:
-  - Burst skill with finisher bonus on low-HP enemies
-- `Support`:
-  - Healing + barrier sustain, with upgrade-driven cleanse
+共享动作：`攻击`、`防御`、`技能`、`同步爆发`。
 
-Shared combat actions:
-- `Attack`
-- `Defend`
-- Role `Skill`
-- `Sync Burst` (high-cost spike)
+## 5. 敌方与意图系统
+敌人按意图序列行动，玩家在己方行动前可读取当前意图：
+- 直击
+- 穿刺
+- 脉冲横扫
+- 信号干扰
+- 加固
+- 过载
 
-## 5) Enemy Model
-Enemies are archetypes with intent patterns:
-- `Strike`
-- `Pierce`
-- `Pulse Sweep`
-- `Signal Jam`
-- `Fortify`
-- `Overload`
+目标：用“可预判性”替代复杂规则堆叠，让策略来自时机判断与资源分配。
 
-Intent is shown before player action for clearer tactical reads.
+## 6. 首领设计（协议主核）
+- 多阶段机制：完整度降至 70% 与 35% 时切换阶段。
+- 阶段切换带来即时压强提升（攻击、装甲、充能）。
+- 专属意图：封锁脉冲、湮灭光束。
+- 界面提供阶段阈值、当前阶段序列、下一阶段序列提示。
 
-Boss identity (`Protocol Prime`) now includes:
-- Multi-phase behavior (phase shifts at 70% and 35% HP)
-- Unique boss routines:
-  - `Lockdown Pulse` (team-wide jam pressure)
-  - `Annihilate Beam` (high single-target execution)
-- Dossier callouts on squad/battle UI to telegraph boss rules
+目标：确保首领战拥有“识别感”和“压迫感”，而不是单纯数值加厚。
 
-Battle readability layer includes:
-- HP bars on agents/enemy
-- Intent threat + likely target + forecast chips
-- Turn recap panel after each player action resolution
+## 7. 节点协议层
+每次部署前必须选择 1 个协议，提供即时取舍：
+- 超频涌动：小队开局能量提升，同时敌方攻击提升。
+- 防火墙穿孔：敌方带破绽开局，同时敌方装甲提升。
+- 动能屏护：小队开局护盾提升，同时敌方充能提升。
+- 干扰覆盖：敌方攻击降低，同时小队开局获得干扰。
 
-## 6) Pre-Battle Node Protocol Layer
-Before each deployment, pick 1 protocol:
-- `Overclock Surge`: +1 EN start / enemy +2 ATK
-- `Firewall Breach`: enemy starts Exposed / enemy +6 Armor
-- `Kinetic Shielding`: squad +2 Barrier / enemy +2 Charge
-- `Jam Override`: enemy -1 ATK / squad starts Jammed
+这一层是当前版本的关键策略入口：低复杂度，高体感收益。
 
-This adds one lightweight strategic decision per node without changing architecture.
+## 8. 奖励与构筑层
+每场战斗后三选一指令奖励，形成局内构筑方向：
+- 资源向：开局能量、战后修复。
+- 全局数值向：攻击、最大生命。
+- 职业向：强化战术/先锋/游击/支援的特定机制。
 
-## 7) Reward/Build Layer
-Between encounters, pick one directive reward from a small set:
-- Economy upgrades (`starting energy`, `post-battle repair`)
-- Global stat upgrades (`ATK`, `max HP`)
-- Role-specific upgrades (Tactician/Vanguard/Skirmisher/Support)
+目标：让每局可形成差异，但不引入重型元进度系统。
 
-This creates lightweight build flavor without heavy meta systems.
+## 9. 范围边界
+纳入：
+- 完整单局可闭环（标题到结算）。
+- 角色定位差异与敌方意图可读性。
+- 首领阶段化机制。
+- 节点协议与指令奖励两层轻构筑。
 
-## 8) In / Out
-### In
-- Full local playable run (title -> squad -> node protocol -> battle -> reward -> end)
-- Distinct role gameplay
-- Enemy intent clarity + threat forecast
-- Boss phase identity
-- Build identity through directives
+排除：
+- 账号体系、经济系统、持久化养成。
+- 复杂站位网格与路径系统。
+- 大规模状态生态与牌库构筑复杂度。
+- 任意后端服务。
 
-### Out
-- Persistent progression/account economy
-- Complex target grid/positioning system
-- Large status ecosystem or deckbuilder complexity
-- Backend services
-
-## 9) Immediate Next Best Iteration
-- Lightweight balance tuning pass on node protocol risk/reward values.
-- Capture and share one hosted static URL (GitHub Pages or Netlify) for external playtest.
+## 10. 近期迭代重点
+- 根据试玩反馈微调节点协议的风险/收益数值。
+- 微调奖励池出现频率与强度曲线。
+- 增加少量占位演出（不改变静态架构前提）。

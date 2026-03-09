@@ -6,94 +6,94 @@ const CONFIG = {
 };
 
 const NODE_PLAN = [
-  { id: 1, label: "Ingress Breach", danger: "Skirmish", enemies: ["warden", "hunter"] },
-  { id: 2, label: "Signal Ambush", danger: "Skirmish", enemies: ["hunter", "siren"] },
-  { id: 3, label: "Control Vault", danger: "Elite", enemies: ["brute", "siren"] },
-  { id: 4, label: "Silent Core", danger: "Boss", enemies: ["prime"] },
+  { id: 1, label: "入侵裂口", danger: "Skirmish", enemies: ["warden", "hunter"] },
+  { id: 2, label: "信号伏击", danger: "Skirmish", enemies: ["hunter", "siren"] },
+  { id: 3, label: "控制金库", danger: "Elite", enemies: ["brute", "siren"] },
+  { id: 4, label: "寂静核心", danger: "Boss", enemies: ["prime"] },
 ];
 
 const NODE_OPERATION_POOL = [
   {
     id: "overclock-surge",
-    title: "Overclock Surge",
-    reward: "All deployed agents start with +1 EN.",
-    risk: "Enemy gains +2 ATK this encounter.",
+    title: "超频涌动",
+    reward: "本场所有已部署特工开局获得 +1 能量。",
+    risk: "本场敌人获得 +2 攻击。",
   },
   {
     id: "firewall-breach",
-    title: "Firewall Breach",
-    reward: "Enemy starts Exposed for 2 turns.",
-    risk: "Enemy starts with +6 Armor.",
+    title: "防火墙穿孔",
+    reward: "敌人开局获得 2 回合破绽。",
+    risk: "敌人开局获得 +6 装甲。",
   },
   {
     id: "kinetic-shielding",
-    title: "Kinetic Shielding",
-    reward: "All deployed agents start with +2 Barrier.",
-    risk: "Enemy starts with +2 Charge.",
+    title: "动能屏护",
+    reward: "本场所有已部署特工开局获得 +2 护盾。",
+    risk: "敌人开局获得 +2 充能。",
   },
   {
     id: "jam-override",
-    title: "Jam Override",
-    reward: "Enemy ATK is reduced by 1 for this encounter.",
-    risk: "All deployed agents start Jammed (1).",
+    title: "干扰覆盖",
+    reward: "本场敌人攻击 -1。",
+    risk: "本场所有已部署特工开局获得 1 层干扰。",
   },
 ];
 
 const AGENT_TEMPLATES = [
   {
     id: "seer",
-    name: "Seer-17",
+    name: "先知-17",
     role: "Tactician",
     hpMax: 18,
     atk: 4,
-    passive: "Gets +1 damage against Exposed targets.",
+    passive: "攻击带破绽目标时额外造成 +1 伤害。",
     skill: {
       id: "forecast",
-      title: "Forecast Lock",
+      title: "预判锁定",
       cost: 1,
-      desc: "Deal light damage and apply Exposed.",
+      desc: "造成轻度伤害并施加破绽。",
     },
   },
   {
     id: "bulwark",
-    name: "Bulwark-5",
+    name: "壁垒-5",
     role: "Vanguard",
     hpMax: 30,
     atk: 3,
-    passive: "Guard cuts incoming hit by 2 damage.",
+    passive: "守势可使受到的单次伤害降低 2 点。",
     skill: {
       id: "anchor",
-      title: "Anchor Wall",
+      title: "锚定壁垒",
       cost: 1,
-      desc: "Gain Guard + Taunt + Barrier.",
+      desc: "获得守势 + 嘲讽 + 护盾。",
     },
   },
   {
     id: "ghost",
-    name: "Ghost-I",
+    name: "幽影-1",
     role: "Skirmisher",
     hpMax: 16,
     atk: 6,
-    passive: "Extra execution damage on low-HP enemies.",
+    passive: "对低生命敌人触发额外处决伤害。",
     skill: {
       id: "phase",
-      title: "Phase Lunge",
+      title: "相位突袭",
       cost: 2,
-      desc: "High burst. Bigger finisher below 35% HP.",
+      desc: "高爆发攻击，敌人生命低于 35% 时斩杀更强。",
     },
   },
   {
     id: "loom",
-    name: "Loom-9",
+    name: "织机-9",
     role: "Support",
     hpMax: 22,
     atk: 3,
-    passive: "Keeps squad stable with barrier sustain.",
+    passive: "通过持续护盾维持小队稳定。",
     skill: {
       id: "patchwave",
-      title: "Patchwave",
+      title: "修补波",
       cost: 1,
-      desc: "Heal and shield the most injured ally.",
+      desc: "治疗并护盾当前受伤最重的友军。",
     },
   },
 ];
@@ -101,40 +101,40 @@ const AGENT_TEMPLATES = [
 const ENEMY_TEMPLATES = {
   warden: {
     id: "warden",
-    name: "Firewall Warden",
-    role: "Bulwark Routine",
+    name: "防火墙守卫",
+    role: "防御例程",
     hpMax: 28,
     atk: 4,
     pattern: ["strike", "fortify", "strike", "jam"],
   },
   hunter: {
     id: "hunter",
-    name: "Trace Hunter",
-    role: "Execution Routine",
+    name: "追迹猎手",
+    role: "处决例程",
     hpMax: 22,
     atk: 5,
     pattern: ["pierce", "jam", "pierce", "strike"],
   },
   siren: {
     id: "siren",
-    name: "Null Siren",
-    role: "Disruptor Routine",
+    name: "空信海妖",
+    role: "扰乱例程",
     hpMax: 26,
     atk: 4,
     pattern: ["sweep", "jam", "strike", "sweep"],
   },
   brute: {
     id: "brute",
-    name: "Gate Brute",
-    role: "Elite Sentinel",
+    name: "闸门重锤",
+    role: "精英哨卫",
     hpMax: 34,
     atk: 6,
     pattern: ["strike", "fortify", "sweep", "strike"],
   },
   prime: {
     id: "prime",
-    name: "Protocol Prime",
-    role: "Core Overseer",
+    name: "协议主核",
+    role: "核心监管体",
     hpMax: 60,
     atk: 7,
     pattern: ["strike", "jam", "sweep", "overload"],
@@ -144,51 +144,51 @@ const ENEMY_TEMPLATES = {
       3: ["annihilate", "jam", "sweep", "overload", "annihilate"],
     },
     dossier: [
-      "Adaptive Core: shifts into harder routines at 70% and 35% integrity.",
-      "Phase shifts immediately spike armor and damage pressure.",
+      "自适应核心：完整度降到 70% 与 35% 时会切换到更高压例程。",
+      "每次阶段切换都会立即提高装甲与伤害压制。",
     ],
   },
 };
 
 const INTENT_META = {
   strike: {
-    label: "Strike",
-    desc: "Medium damage to one target.",
+    label: "直击",
+    desc: "对单体造成中等伤害。",
     threat: "medium",
   },
   pierce: {
-    label: "Pierce",
-    desc: "Hits lowest HP target and ignores Guard.",
+    label: "穿刺",
+    desc: "攻击生命最低目标，并无视守势。",
     threat: "high",
   },
   sweep: {
-    label: "Pulse Sweep",
-    desc: "Low damage to all deployed agents.",
+    label: "脉冲横扫",
+    desc: "对所有已部署特工造成低额伤害。",
     threat: "high",
   },
   jam: {
-    label: "Signal Jam",
-    desc: "Light damage and blocks next energy gain.",
+    label: "信号干扰",
+    desc: "造成轻伤并阻断下一次能量获取。",
     threat: "medium",
   },
   fortify: {
-    label: "Fortify",
-    desc: "Adds armor and chips one target.",
+    label: "加固",
+    desc: "获得装甲并对单体造成刮擦伤害。",
     threat: "medium",
   },
   overload: {
-    label: "Overload",
-    desc: "Charges for a heavier next attack.",
+    label: "过载",
+    desc: "蓄能以强化下一次攻击。",
     threat: "low",
   },
   lockdown: {
-    label: "Lockdown Pulse",
-    desc: "Jams the full squad and inflicts light area damage.",
+    label: "封锁脉冲",
+    desc: "全队施加干扰并造成轻度范围伤害。",
     threat: "high",
   },
   annihilate: {
-    label: "Annihilate Beam",
-    desc: "Heavy strike on the highest HP target. Ignores Guard.",
+    label: "湮灭光束",
+    desc: "重击生命最高目标，并无视守势。",
     threat: "extreme",
   },
 };
@@ -196,8 +196,8 @@ const INTENT_META = {
 const REWARD_POOL = [
   {
     id: "nanite-sweep",
-    title: "Nanite Sweep",
-    desc: "Instantly heal all alive agents for 5 HP.",
+    title: "纳米扫修",
+    desc: "立即为所有存活特工恢复 5 点生命。",
     repeatable: true,
     persistent: false,
     apply: (run) => {
@@ -210,8 +210,8 @@ const REWARD_POOL = [
   },
   {
     id: "kinetic-compiler",
-    title: "Kinetic Compiler",
-    desc: "+1 ATK to all agents.",
+    title: "动能编译器",
+    desc: "全体特工攻击 +1。",
     repeatable: false,
     persistent: true,
     apply: (run) => {
@@ -222,8 +222,8 @@ const REWARD_POOL = [
   },
   {
     id: "cold-start-cells",
-    title: "Cold Start Cells",
-    desc: "Future battles start with +1 EN (max +3).",
+    title: "冷启动电芯",
+    desc: "后续战斗开局能量 +1（最多叠到 +3）。",
     repeatable: true,
     persistent: true,
     apply: (run) => {
@@ -232,8 +232,8 @@ const REWARD_POOL = [
   },
   {
     id: "self-repair-daemon",
-    title: "Self-Repair Daemon",
-    desc: "Post-battle auto-repair +2 HP.",
+    title: "自修复守护程式",
+    desc: "战后自动修复量 +2 生命。",
     repeatable: true,
     persistent: true,
     apply: (run) => {
@@ -242,8 +242,8 @@ const REWARD_POOL = [
   },
   {
     id: "seer-uplink",
-    title: "Seer Uplink",
-    desc: "Exposed duration +1 and exposed damage +1.",
+    title: "先知上行链路",
+    desc: "破绽持续回合 +1，破绽增伤 +1。",
     repeatable: false,
     persistent: true,
     apply: (run) => {
@@ -253,8 +253,8 @@ const REWARD_POOL = [
   },
   {
     id: "bulwark-mesh",
-    title: "Bulwark Mesh",
-    desc: "Vanguard Defend grants all allies +1 Barrier.",
+    title: "壁垒网格",
+    desc: "先锋防御时，全体友军获得 +1 护盾。",
     repeatable: false,
     persistent: true,
     apply: (run) => {
@@ -263,8 +263,8 @@ const REWARD_POOL = [
   },
   {
     id: "ghost-firmware",
-    title: "Ghost Firmware",
-    desc: "Skirmisher skill cost -1 and finisher damage +2.",
+    title: "幽影固件",
+    desc: "游击手技能消耗 -1，终结伤害 +2。",
     repeatable: false,
     persistent: true,
     apply: (run) => {
@@ -274,8 +274,8 @@ const REWARD_POOL = [
   },
   {
     id: "loom-injector",
-    title: "Loom Injector",
-    desc: "Support Patchwave heals +3 and clears Jam.",
+    title: "织机注入器",
+    desc: "支援型“修补波”治疗 +3，并清除干扰。",
     repeatable: false,
     persistent: true,
     apply: (run) => {
@@ -285,8 +285,8 @@ const REWARD_POOL = [
   },
   {
     id: "hull-splice",
-    title: "Hull Splice",
-    desc: "+4 Max HP and +4 HP to all agents.",
+    title: "舰壳拼接",
+    desc: "全体特工最大生命 +4，并立即恢复 4 点生命。",
     repeatable: true,
     persistent: true,
     apply: (run) => {
@@ -304,12 +304,32 @@ const state = {
   battle: null,
   pendingRewards: [],
   runResult: null,
-  log: ["System standby. Awaiting protocol boot."],
+  log: ["系统待机中，等待协议启动。"],
 };
 
 const screenRoot = document.getElementById("screen-root");
 const runInfo = document.getElementById("run-info");
 const logList = document.getElementById("log-list");
+
+const DANGER_LABELS = {
+  Skirmish: "遭遇战",
+  Elite: "精英战",
+  Boss: "首领战",
+};
+
+const ROLE_LABELS = {
+  Tactician: "战术型",
+  Vanguard: "先锋型",
+  Skirmisher: "游击型",
+  Support: "支援型",
+};
+
+const THREAT_LABELS = {
+  low: "低",
+  medium: "中",
+  high: "高",
+  extreme: "极高",
+};
 
 function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -326,6 +346,18 @@ function sampleDistinct(arr, count) {
     [clone[i], clone[j]] = [clone[j], clone[i]];
   }
   return clone.slice(0, count);
+}
+
+function getDangerLabel(danger) {
+  return DANGER_LABELS[danger] || danger;
+}
+
+function getRoleLabel(role) {
+  return ROLE_LABELS[role] || role;
+}
+
+function getThreatLabel(threat) {
+  return THREAT_LABELS[threat] || threat;
 }
 
 function addLog(text) {
@@ -486,7 +518,7 @@ function selectNodeOperation(operationId) {
   plan.selectedId = operationId;
   const operation = getNodeOperationById(operationId);
   if (operation) {
-    addLog(`Node protocol selected: ${operation.title}.`);
+    addLog(`已选择节点协议：${operation.title}。`);
   }
   render();
 }
@@ -499,7 +531,7 @@ function startRun() {
   state.runResult = null;
   state.screen = "squad";
   state.log = [];
-  addLog("Run started. Assemble a squad for Node 1.");
+  addLog("行动已开始，请为第 1 节点编成小队。");
   render();
 }
 
@@ -509,7 +541,7 @@ function abortRun() {
   state.battle = null;
   state.pendingRewards = [];
   state.runResult = null;
-  state.log = ["Protocol reset. Awaiting new run."];
+  state.log = ["协议已重置，等待新的行动。"];
   render();
 }
 
@@ -526,7 +558,7 @@ function toggleSquadAgent(agentId, checked) {
   if (checked) {
     if (!state.run.squadIds.includes(agentId)) {
       if (state.run.squadIds.length >= CONFIG.maxSquadSize) {
-        addLog(`Squad limit ${CONFIG.maxSquadSize}. Unselect an agent first.`);
+        addLog(`小队上限为 ${CONFIG.maxSquadSize} 人，请先取消一名特工。`);
         render();
         return;
       }
@@ -589,7 +621,7 @@ function queueEnemyIntent(enemy) {
   enemy.patternIndex += 1;
   const meta = INTENT_META[intentId] || {
     label: intentId,
-    desc: "Unknown hostile routine.",
+    desc: "未知敌方例程。",
     threat: "medium",
   };
   enemy.intent = {
@@ -613,7 +645,7 @@ function handleBossPhaseShift(enemy) {
     enemy.patternIndex = 0;
     enemy.atk += 1;
     enemy.armor += 4;
-    addLog(`${enemy.name} enters Phase 2: lockdown routines online (+1 ATK, +4 Armor).`);
+    addLog(`${enemy.name}进入第 2 阶段：封锁例程上线（攻击 +1，装甲 +4）。`);
     queueEnemyIntent(enemy);
     return;
   }
@@ -625,7 +657,7 @@ function handleBossPhaseShift(enemy) {
     enemy.atk += 2;
     enemy.charge += 2;
     enemy.armor += 2;
-    addLog(`${enemy.name} enters Phase 3: annihilation loop online (+2 ATK, +2 Charge, +2 Armor).`);
+    addLog(`${enemy.name}进入第 3 阶段：湮灭循环上线（攻击 +2，充能 +2，装甲 +2）。`);
     queueEnemyIntent(enemy);
   }
 }
@@ -655,15 +687,15 @@ function applyNodeOperationEffects(operation, squad, enemy) {
       agent.energy = clamp(agent.energy + 1, 0, CONFIG.energyCap);
     });
     enemy.atk += 2;
-    effects.push("Squad starts +1 EN.");
-    effects.push(`${enemy.name} gains +2 ATK.`);
+    effects.push("小队开局获得 +1 能量。");
+    effects.push(`${enemy.name}获得 +2 攻击。`);
   }
 
   if (operation.id === "firewall-breach") {
     enemy.status.exposed = Math.max(enemy.status.exposed, 2);
     enemy.armor += 6;
-    effects.push(`${enemy.name} starts Exposed (2).`);
-    effects.push(`${enemy.name} starts with +6 Armor.`);
+    effects.push(`${enemy.name}开局获得破绽（2）。`);
+    effects.push(`${enemy.name}开局获得 +6 装甲。`);
   }
 
   if (operation.id === "kinetic-shielding") {
@@ -671,8 +703,8 @@ function applyNodeOperationEffects(operation, squad, enemy) {
       agent.status.barrier += 2;
     });
     enemy.charge += 2;
-    effects.push("Squad starts with +2 Barrier each.");
-    effects.push(`${enemy.name} starts with +2 Charge.`);
+    effects.push("小队全员开局获得 +2 护盾。");
+    effects.push(`${enemy.name}开局获得 +2 充能。`);
   }
 
   if (operation.id === "jam-override") {
@@ -680,8 +712,8 @@ function applyNodeOperationEffects(operation, squad, enemy) {
     squad.forEach((agent) => {
       agent.status.jam += 1;
     });
-    effects.push(`${enemy.name} loses 1 ATK.`);
-    effects.push("Squad starts Jammed (1).");
+    effects.push(`${enemy.name}攻击降低 1 点。`);
+    effects.push("小队开局获得干扰（1）。");
   }
 
   return effects;
@@ -694,7 +726,7 @@ function deployBattle() {
 
   const nodeOperationPlan = ensureNodeOperationPlan();
   if (!nodeOperationPlan || !nodeOperationPlan.selectedId) {
-    addLog("Select a pre-battle node protocol before deployment.");
+    addLog("部署前必须先选择一个节点协议。");
     render();
     return;
   }
@@ -703,7 +735,7 @@ function deployBattle() {
   ensureValidSquad();
   const aliveSquad = getAliveAgents(state.run.squadIds);
   if (aliveSquad.length === 0) {
-    endRun("defeat", "No deployable agents left.");
+    endRun("defeat", "已无可部署特工。");
     return;
   }
 
@@ -725,12 +757,12 @@ function deployBattle() {
   state.screen = "battle";
 
   const node = getCurrentNode();
-  addLog(`Node ${state.run.nodeIndex + 1} started: ${node.label} (${node.danger}).`);
+  addLog(`第 ${state.run.nodeIndex + 1} 节点开始：${node.label}（${getDangerLabel(node.danger)}）。`);
   if (selectedOperation) {
-    addLog(`Protocol active: ${selectedOperation.title}.`);
+    addLog(`协议生效：${selectedOperation.title}。`);
     operationEffects.forEach((line) => addLog(line));
   }
-  addLog(`${enemy.name} engaged. Intent: ${enemy.intent.label}.`);
+  addLog(`${enemy.name}已接敌，意图：${enemy.intent.label}。`);
   render();
 }
 
@@ -768,7 +800,7 @@ function gainEnergy(agent, amount) {
 
   if (agent.status.jam > 0) {
     agent.status.jam -= 1;
-    addLog(`${agent.name} is Jammed and gains no energy.`);
+    addLog(`${agent.name}受到干扰，本回合无法获得能量。`);
     return;
   }
 
@@ -786,7 +818,7 @@ function applyDamageToEnemy(rawDamage, sourceLabel) {
     const absorbed = Math.min(state.battle.enemy.armor, damage);
     state.battle.enemy.armor -= absorbed;
     damage -= absorbed;
-    addLog(`${state.battle.enemy.name} armor absorbs ${absorbed}.`);
+    addLog(`${state.battle.enemy.name}的装甲吸收了 ${absorbed} 点伤害。`);
   }
 
   if (damage > 0) {
@@ -794,7 +826,7 @@ function applyDamageToEnemy(rawDamage, sourceLabel) {
     handleBossPhaseShift(state.battle.enemy);
   }
 
-  addLog(`${sourceLabel} deals ${damage} to ${state.battle.enemy.name}.`);
+  addLog(`${sourceLabel}对${state.battle.enemy.name}造成了 ${damage} 点伤害。`);
   return damage;
 }
 
@@ -803,21 +835,21 @@ function applyDamageToAgent(agent, rawDamage, options = {}) {
 
   if (!options.ignoreGuard && agent.status.guard > 0) {
     damage = Math.max(1, damage - 2);
-    addLog(`${agent.name} guards and reduces incoming damage.`);
+    addLog(`${agent.name}触发守势，降低了来袭伤害。`);
   }
 
   if (agent.status.barrier > 0) {
     const absorbed = Math.min(agent.status.barrier, damage);
     agent.status.barrier -= absorbed;
     damage -= absorbed;
-    addLog(`${agent.name}'s barrier absorbs ${absorbed}.`);
+    addLog(`${agent.name}的护盾吸收了 ${absorbed} 点伤害。`);
   }
 
   if (damage > 0) {
     agent.hp = Math.max(0, agent.hp - damage);
-    addLog(`${agent.name} takes ${damage} damage.`);
+    addLog(`${agent.name}受到 ${damage} 点伤害。`);
     if (agent.hp <= 0) {
-      addLog(`${agent.name} is offline.`);
+      addLog(`${agent.name}已离线。`);
     }
   }
 }
@@ -891,17 +923,17 @@ function getIntentLabel(intentId) {
 }
 
 function formatIntentSequence(intentIds, count = 3) {
-  return intentIds.slice(0, count).map((intentId) => getIntentLabel(intentId)).join(" -> ");
+  return intentIds.slice(0, count).map((intentId) => getIntentLabel(intentId)).join(" → ");
 }
 
 function getLikelyIntentTarget(intentId) {
   if (!state.run) {
-    return "Unknown";
+    return "未知";
   }
 
   const alive = getAliveAgents(state.run.squadIds);
   if (alive.length === 0) {
-    return "No targets";
+    return "无目标";
   }
 
   const taunting = alive.filter((agent) => agent.status.taunt > 0);
@@ -910,9 +942,9 @@ function getLikelyIntentTarget(intentId) {
     ["strike", "pierce", "jam", "fortify", "annihilate"].includes(intentId)
   ) {
     if (taunting.length === 1) {
-      return `${taunting[0].name} (Taunt)`;
+      return `${taunting[0].name}（嘲讽）`;
     }
-    return "Taunting agents";
+    return "嘲讽中的特工";
   }
 
   if (intentId === "pierce") {
@@ -928,18 +960,18 @@ function getLikelyIntentTarget(intentId) {
   }
 
   if (intentId === "sweep" || intentId === "lockdown") {
-    return "All deployed agents";
+    return "所有已部署特工";
   }
 
   if (intentId === "overload") {
-    return "Self-charge (next attack)";
+    return "自身充能（强化下次攻击）";
   }
 
   if (intentId === "fortify") {
-    return "Self-armor + random chip";
+    return "自身加甲 + 随机刮伤";
   }
 
-  return "Random deployed agent";
+  return "随机已部署特工";
 }
 
 function getIntentForecast(enemy) {
@@ -950,38 +982,38 @@ function getIntentForecast(enemy) {
     return `${formatDamageRange(
       Math.max(1, enemy.atk - 1) + charge,
       enemy.atk + 1 + charge
-    )} single-target`;
+    )} 单体伤害`;
   }
 
   if (intentId === "pierce") {
-    return `${formatDamageRange(enemy.atk + charge, enemy.atk + 2 + charge)} single-target`;
+    return `${formatDamageRange(enemy.atk + charge, enemy.atk + 2 + charge)} 单体伤害`;
   }
 
   if (intentId === "sweep") {
-    return `${formatDamageRange(Math.max(1, enemy.atk - 2), enemy.atk)} to all agents`;
+    return `${formatDamageRange(Math.max(1, enemy.atk - 2), enemy.atk)} 全体伤害`;
   }
 
   if (intentId === "jam") {
-    return `${formatDamageRange(Math.max(1, enemy.atk - 2), enemy.atk)} + Jam`;
+    return `${formatDamageRange(Math.max(1, enemy.atk - 2), enemy.atk)} + 干扰`;
   }
 
   if (intentId === "fortify") {
-    return `+3 Armor, then ${formatDamageRange(1, Math.max(2, enemy.atk - 1))} chip`;
+    return `+3 装甲，然后造成 ${formatDamageRange(1, Math.max(2, enemy.atk - 1))} 刮伤`;
   }
 
   if (intentId === "overload") {
-    return "+3 Charge, +1 Armor";
+    return "+3 充能，+1 装甲";
   }
 
   if (intentId === "lockdown") {
-    return `${formatDamageRange(Math.max(1, enemy.atk - 3), Math.max(1, enemy.atk - 1))} + Jam to all`;
+    return `${formatDamageRange(Math.max(1, enemy.atk - 3), Math.max(1, enemy.atk - 1))} 全体伤害 + 干扰`;
   }
 
   if (intentId === "annihilate") {
-    return `${formatDamageRange(enemy.atk + 2 + charge, enemy.atk + 5 + charge)} heavy single-target`;
+    return `${formatDamageRange(enemy.atk + 2 + charge, enemy.atk + 5 + charge)} 重型单体伤害`;
   }
 
-  return "Unknown effect";
+  return "未知效果";
 }
 
 function decaySquadStatuses() {
@@ -1012,7 +1044,7 @@ function executeEnemyTurn() {
     if (target) {
       const damage = randInt(Math.max(1, enemy.atk - 1), enemy.atk + 1) + enemy.charge;
       applyDamageToAgent(target, damage);
-      addLog(`${enemy.name} uses Strike on ${target.name}.`);
+      addLog(`${enemy.name}对${target.name}施放了直击。`);
       enemy.charge = 0;
     }
   }
@@ -1022,7 +1054,7 @@ function executeEnemyTurn() {
     if (target) {
       const damage = randInt(enemy.atk, enemy.atk + 2) + enemy.charge;
       applyDamageToAgent(target, damage, { ignoreGuard: true });
-      addLog(`${enemy.name} uses Pierce on ${target.name}.`);
+      addLog(`${enemy.name}对${target.name}施放了穿刺。`);
       enemy.charge = 0;
     }
   }
@@ -1033,7 +1065,7 @@ function executeEnemyTurn() {
     targets.forEach((target) => {
       applyDamageToAgent(target, damage);
     });
-    addLog(`${enemy.name} broadcasts Pulse Sweep.`);
+    addLog(`${enemy.name}释放了脉冲横扫。`);
   }
 
   if (intentId === "jam") {
@@ -1042,25 +1074,25 @@ function executeEnemyTurn() {
       const damage = randInt(Math.max(1, enemy.atk - 2), enemy.atk);
       applyDamageToAgent(target, damage);
       target.status.jam += 1;
-      addLog(`${enemy.name} jams ${target.name}.`);
+      addLog(`${enemy.name}对${target.name}施加了干扰。`);
     }
   }
 
   if (intentId === "fortify") {
     enemy.armor += 3;
     const target = getEnemyTarget("random");
-    addLog(`${enemy.name} fortifies for +3 armor.`);
+    addLog(`${enemy.name}加固自身，装甲 +3。`);
     if (target) {
       const damage = randInt(1, Math.max(2, enemy.atk - 1));
       applyDamageToAgent(target, damage);
-      addLog(`${enemy.name} chips ${target.name}.`);
+      addLog(`${enemy.name}对${target.name}造成刮擦伤害。`);
     }
   }
 
   if (intentId === "overload") {
     enemy.charge += 3;
     enemy.armor += 1;
-    addLog(`${enemy.name} overloads: next attack gains +3 damage.`);
+    addLog(`${enemy.name}进入过载：下次攻击伤害 +3。`);
   }
 
   if (intentId === "lockdown") {
@@ -1071,7 +1103,7 @@ function executeEnemyTurn() {
       target.status.jam += 1;
     });
     enemy.armor += 2;
-    addLog(`${enemy.name} emits Lockdown Pulse and reinforces armor.`);
+    addLog(`${enemy.name}释放封锁脉冲并强化装甲。`);
   }
 
   if (intentId === "annihilate") {
@@ -1080,7 +1112,7 @@ function executeEnemyTurn() {
       const damage = randInt(enemy.atk + 2, enemy.atk + 5) + enemy.charge;
       applyDamageToAgent(target, damage, { ignoreGuard: true });
       enemy.charge = 0;
-      addLog(`${enemy.name} fires Annihilate Beam at ${target.name}.`);
+      addLog(`${enemy.name}向${target.name}发射湮灭光束。`);
     }
   }
 
@@ -1130,7 +1162,7 @@ function executeSkill(actor) {
     applyDamageToEnemy(damage, actor.name);
     const exposeTurns = 2 + state.run.mods.tacticianExposeTurns;
     enemy.status.exposed = Math.max(enemy.status.exposed, exposeTurns);
-    addLog(`${actor.name} applies Exposed for ${exposeTurns} turns.`);
+    addLog(`${actor.name}施加了 ${exposeTurns} 回合破绽。`);
     return;
   }
 
@@ -1138,10 +1170,10 @@ function executeSkill(actor) {
     actor.status.guard = Math.max(actor.status.guard, 2);
     actor.status.taunt = Math.max(actor.status.taunt, 2);
     actor.status.barrier += 3;
-    addLog(`${actor.name} anchors the line (Guard + Taunt + Barrier).`);
+    addLog(`${actor.name}稳住前线（守势 + 嘲讽 + 护盾）。`);
     if (state.run.mods.vanguardBarrierAura) {
       grantBarrierToSquad(1, actor.id);
-      addLog("Bulwark Mesh extends +1 barrier to allies.");
+      addLog("壁垒网格为友军追加 +1 护盾。");
     }
     return;
   }
@@ -1154,7 +1186,7 @@ function executeSkill(actor) {
     }
     if (hpRatio <= 0.35) {
       damage += state.run.mods.skirmisherFinisherBonus;
-      addLog(`${actor.name} triggers execution bonus.`);
+      addLog(`${actor.name}触发了处决加成。`);
     }
     applyDamageToEnemy(damage, actor.name);
     return;
@@ -1173,31 +1205,31 @@ function executeSkill(actor) {
     target.status.jam = 0;
 
     const recovered = target.hp - beforeHp;
-    addLog(`${actor.name} restores ${recovered} HP to ${target.name} and adds barrier.`);
+    addLog(`${actor.name}为${target.name}恢复 ${recovered} 点生命并提供护盾。`);
 
     if (state.run.mods.supportCleanseAll) {
       getAliveAgents(state.run.squadIds).forEach((agent) => {
         agent.status.jam = 0;
       });
-      addLog("Loom Injector clears Jam for the squad.");
+      addLog("织机注入器为全队清除了干扰。");
     }
   }
 }
 
 function getActionLabel(actionType, actor) {
   if (actionType === "attack") {
-    return "Attack";
+    return "攻击";
   }
   if (actionType === "defend") {
-    return "Defend";
+    return "防御";
   }
   if (actionType === "skill") {
     return actor.skill.title;
   }
   if (actionType === "burst") {
-    return "Sync Burst";
+    return "同步爆发";
   }
-  return "Action";
+  return "行动";
 }
 
 function performAction(actionType) {
@@ -1207,7 +1239,7 @@ function performAction(actionType) {
 
   const actor = findSelectedActor();
   if (!actor) {
-    endRun("defeat", "No active actor available.");
+    endRun("defeat", "没有可用的当前行动特工。");
     return;
   }
 
@@ -1225,17 +1257,17 @@ function performAction(actionType) {
   if (actionType === "defend") {
     actor.status.guard = Math.max(actor.status.guard, 1);
     gainEnergy(actor, 1);
-    addLog(`${actor.name} takes a defensive posture.`);
+    addLog(`${actor.name}进入防御姿态。`);
     if (actor.role === "Vanguard" && state.run.mods.vanguardBarrierAura) {
       grantBarrierToSquad(1, actor.id);
-      addLog("Bulwark Mesh grants +1 barrier to allies.");
+      addLog("壁垒网格为友军提供 +1 护盾。");
     }
   }
 
   if (actionType === "skill") {
     const cost = getSkillCost(actor);
     if (actor.energy < cost) {
-      addLog(`${actor.name} lacks energy for ${actor.skill.title}.`);
+      addLog(`${actor.name}能量不足，无法施放${actor.skill.title}。`);
       render();
       return;
     }
@@ -1246,7 +1278,7 @@ function performAction(actionType) {
   if (actionType === "burst") {
     const cost = 3;
     if (actor.energy < cost) {
-      addLog(`${actor.name} lacks energy for Sync Burst.`);
+      addLog(`${actor.name}能量不足，无法施放同步爆发。`);
       render();
       return;
     }
@@ -1254,7 +1286,7 @@ function performAction(actionType) {
     const base = randInt(actor.atk + 4, actor.atk + 8);
     const damage = calcPlayerDamage(actor, base);
     applyDamageToEnemy(damage, actor.name);
-    addLog(`${actor.name} executes Sync Burst.`);
+    addLog(`${actor.name}施放了同步爆发。`);
   }
 
   const playerDamage = Math.max(0, enemyHpBeforeAction - state.battle.enemy.hp);
@@ -1262,10 +1294,10 @@ function performAction(actionType) {
   if (state.battle.enemy.hp <= 0) {
     state.battle.lastResolution = {
       turn: state.battle.turn,
-      player: `${actor.name} used ${actionLabel} for ${playerDamage} damage.`,
-      enemy: `${state.battle.enemy.name} crashed before enemy action.`,
+      player: `${actor.name}使用${actionLabel}造成 ${playerDamage} 点伤害。`,
+      enemy: `${state.battle.enemy.name}在敌方行动前已崩解。`,
     };
-    addLog(`${state.battle.enemy.name} crashed.`);
+    addLog(`${state.battle.enemy.name}已崩解。`);
     onBattleWin();
     return;
   }
@@ -1278,14 +1310,14 @@ function performAction(actionType) {
 
   state.battle.lastResolution = {
     turn: state.battle.turn,
-    player: `${actor.name} used ${actionLabel} for ${playerDamage} damage.`,
-    enemy: `${state.battle.enemy.name} resolved ${resolvedIntentLabel} for ${enemyDamage} squad damage.`,
+    player: `${actor.name}使用${actionLabel}造成 ${playerDamage} 点伤害。`,
+    enemy: `${state.battle.enemy.name}完成了${resolvedIntentLabel}，对小队造成 ${enemyDamage} 点总伤害。`,
     intentThreat: INTENT_META[resolvedIntentId] ? INTENT_META[resolvedIntentId].threat : "medium",
   };
 
   const aliveSquad = getAliveAgents(state.run.squadIds);
   if (aliveSquad.length === 0) {
-    endRun("defeat", "Squad eliminated.");
+    endRun("defeat", "小队已全灭。");
     return;
   }
 
@@ -1314,7 +1346,7 @@ function applyPostBattleRecovery() {
   });
 
   if (totalRecovered > 0) {
-    addLog(`Auto-repair restores ${totalRecovered} total HP across the squad.`);
+    addLog(`自动修复共为小队恢复了 ${totalRecovered} 点生命。`);
   }
 }
 
@@ -1328,9 +1360,9 @@ function endRun(result, reason) {
   }
 
   if (result === "victory") {
-    addLog("Silent Core neutralized. Run success.");
+    addLog("寂静核心已被中和，行动成功。");
   } else {
-    addLog("Run failed.");
+    addLog("行动失败。");
   }
 
   render();
@@ -1351,7 +1383,7 @@ function onBattleWin() {
   state.pendingRewards = getRewardChoices();
   state.screen = "reward";
   state.battle = null;
-  addLog("Encounter cleared. Select one directive reward.");
+  addLog("遭遇战已清除，请选择一项指令奖励。");
   render();
 }
 
@@ -1375,7 +1407,7 @@ function applyReward(rewardId) {
     state.run.upgrades.push({ id: reward.id, title: reward.title });
   }
 
-  addLog(`Directive installed: ${reward.title}.`);
+  addLog(`已安装指令：${reward.title}。`);
 
   state.pendingRewards = [];
   state.run.nodeIndex += 1;
@@ -1388,28 +1420,28 @@ function applyReward(rewardId) {
 function formatAgentStatus(agent) {
   const tags = [];
   if (agent.status.guard > 0) {
-    tags.push(`Guard ${agent.status.guard}`);
+    tags.push(`守势 ${agent.status.guard}`);
   }
   if (agent.status.barrier > 0) {
-    tags.push(`Barrier ${agent.status.barrier}`);
+    tags.push(`护盾 ${agent.status.barrier}`);
   }
   if (agent.status.jam > 0) {
-    tags.push(`Jammed ${agent.status.jam}`);
+    tags.push(`干扰 ${agent.status.jam}`);
   }
   if (agent.status.taunt > 0) {
-    tags.push(`Taunt ${agent.status.taunt}`);
+    tags.push(`嘲讽 ${agent.status.taunt}`);
   }
   return tags;
 }
 
 function renderDirectiveList() {
   if (!state.run) {
-    return '<p class="muted">No permanent directives installed yet.</p>';
+    return '<p class="muted">尚未安装常驻指令。</p>';
   }
 
   const entries = Object.entries(state.run.rewardTally);
   if (entries.length === 0) {
-    return '<p class="muted">No permanent directives installed yet.</p>';
+    return '<p class="muted">尚未安装常驻指令。</p>';
   }
 
   const labels = entries
@@ -1418,7 +1450,7 @@ function renderDirectiveList() {
       if (!reward) {
         return null;
       }
-      return count > 1 ? `${reward.title} x${count}` : reward.title;
+      return count > 1 ? `${reward.title} ×${count}` : reward.title;
     })
     .filter(Boolean);
 
@@ -1444,11 +1476,11 @@ function renderBossPhaseReference(bossTemplate) {
   }
 
   return `
-    <p class="muted">Phase breakpoints: 70% integrity -> Phase 2, 35% integrity -> Phase 3.</p>
+    <p class="muted">阶段阈值：完整度 70% 进入第 2 阶段，35% 进入第 3 阶段。</p>
     <ul>
-      <li>Phase 1 signature: ${formatIntentSequence(bossTemplate.phasePatterns[1])}</li>
-      <li>Phase 2 signature: ${formatIntentSequence(bossTemplate.phasePatterns[2])}</li>
-      <li>Phase 3 signature: ${formatIntentSequence(bossTemplate.phasePatterns[3])}</li>
+      <li>第 1 阶段标志序列：${formatIntentSequence(bossTemplate.phasePatterns[1])}</li>
+      <li>第 2 阶段标志序列：${formatIntentSequence(bossTemplate.phasePatterns[2])}</li>
+      <li>第 3 阶段标志序列：${formatIntentSequence(bossTemplate.phasePatterns[3])}</li>
     </ul>
   `;
 }
@@ -1475,13 +1507,13 @@ function renderBossBattleReadout(enemy) {
   if (!nextPhase) {
     return `
       <article class="boss-readout">
-        <h3>Boss Readout</h3>
+        <h3>首领读数</h3>
         <div class="chip-row">
-          <span class="chip">Integrity ${integrityPct}%</span>
-          <span class="chip">Phase ${currentPhase}/3</span>
-          <span class="chip boss-alert final">Final phase active</span>
+          <span class="chip">完整度 ${integrityPct}%</span>
+          <span class="chip">阶段 ${currentPhase}/3</span>
+          <span class="chip boss-alert final">最终阶段已激活</span>
         </div>
-        <p class="muted">Current phase signature: ${currentSignature}</p>
+        <p class="muted">当前阶段序列：${currentSignature}</p>
       </article>
     `;
   }
@@ -1492,16 +1524,16 @@ function renderBossBattleReadout(enemy) {
 
   return `
     <article class="boss-readout">
-      <h3>Boss Readout</h3>
+      <h3>首领读数</h3>
       <div class="chip-row">
-        <span class="chip">Integrity ${integrityPct}%</span>
-        <span class="chip">Phase ${currentPhase}/3</span>
+        <span class="chip">完整度 ${integrityPct}%</span>
+        <span class="chip">阶段 ${currentPhase}/3</span>
         <span class="chip boss-alert ${urgentClass}">
-          Next shift: ${thresholdPct}% (${shiftDistance}% away)
+          下一次切换：${thresholdPct}%（还差 ${shiftDistance}%）
         </span>
       </div>
-      <p class="muted">Current phase signature: ${currentSignature}</p>
-      <p class="muted">Incoming phase ${nextPhase} signature: ${nextSignature}</p>
+      <p class="muted">当前阶段序列：${currentSignature}</p>
+      <p class="muted">即将到来的第 ${nextPhase} 阶段序列：${nextSignature}</p>
     </article>
   `;
 }
@@ -1538,8 +1570,8 @@ function renderNodeOperationPanel() {
 
   return `
     <article class="panel" style="margin-bottom:12px;">
-      <h3>Node Protocol (Mandatory)</h3>
-      <p class="muted">Choose one risk/reward modifier before deployment.</p>
+      <h3>节点协议（必选）</h3>
+      <p class="muted">部署前请选择一个风险/收益修正项。</p>
       <div class="card-grid">
         ${options
           .map((operation) => {
@@ -1547,10 +1579,10 @@ function renderNodeOperationPanel() {
             return `
               <article class="card ${selected ? "selected" : ""}">
                 <h3>${operation.title}</h3>
-                <p><strong>Reward:</strong> ${operation.reward}</p>
-                <p><strong>Risk:</strong> ${operation.risk}</p>
+                <p><strong>收益：</strong>${operation.reward}</p>
+                <p><strong>风险：</strong>${operation.risk}</p>
                 <button class="btn ${selected ? "" : "primary"}" data-action="pick-node-operation" data-operation-id="${operation.id}">
-                  ${selected ? "Selected" : "Choose"}
+                  ${selected ? "已选择" : "选择"}
                 </button>
               </article>
             `;
@@ -1563,7 +1595,7 @@ function renderNodeOperationPanel() {
 
 function renderHeader() {
   if (!state.run) {
-    runInfo.textContent = "No active run";
+    runInfo.textContent = "当前无进行中的行动";
     return;
   }
 
@@ -1572,10 +1604,10 @@ function renderHeader() {
   const node = getCurrentNode();
   const stageLabel =
     state.screen === "run-end" || !node
-      ? "Run End"
-      : `${node.danger}: ${node.label}`;
+      ? "行动结束"
+      : `${getDangerLabel(node.danger)}：${node.label}`;
 
-  runInfo.textContent = `Node ${nodeNum}/${state.run.maxNode} | ${stageLabel} | Alive ${aliveCount} | Directives ${Object.keys(state.run.rewardTally).length}`;
+  runInfo.textContent = `节点 ${nodeNum}/${state.run.maxNode} | ${stageLabel} | 存活 ${aliveCount} | 指令 ${Object.keys(state.run.rewardTally).length}`;
 }
 
 function renderLog() {
@@ -1585,12 +1617,12 @@ function renderLog() {
 function renderTitle() {
   screenRoot.innerHTML = `
     <section>
-      <h2 class="screen-title">Silent Protocol</h2>
-      <p>Build a 3-agent AGI strike squad, clear 4 escalating nodes, and break the Silent Core.</p>
+      <h2 class="screen-title">寂静协议</h2>
+      <p>组建一支 3 人智能体突击小队，击穿 4 个递进节点，并摧毁寂静核心。</p>
       <div class="row">
-        <button class="btn primary" data-action="start-run">Start Run</button>
+        <button class="btn primary" data-action="start-run">开始行动</button>
       </div>
-      <p class="muted">Static/local prototype. No backend. Focused on squad role synergy + quick tactical runs.</p>
+      <p class="muted">纯本地静态原型，无后端。聚焦角色协同与快节奏战术短局。</p>
     </section>
   `;
 }
@@ -1616,21 +1648,21 @@ function renderSquad() {
   screenRoot.innerHTML = `
     <section>
       <div class="row spread">
-        <h2 class="screen-title">Squad Assembly</h2>
-        <small>${state.run.squadIds.length}/${CONFIG.maxSquadSize} selected</small>
+        <h2 class="screen-title">小队编成</h2>
+        <small>已选 ${state.run.squadIds.length}/${CONFIG.maxSquadSize}</small>
       </div>
 
       <article class="panel" style="margin-bottom:12px;">
-        <h3>Next Encounter: Node ${state.run.nodeIndex + 1} - ${node ? node.label : "Unknown"}</h3>
-        <p>${node ? node.danger : ""} threat level. Predicted hostiles: ${threatLabels.join(" / ")}.</p>
-        <p class="muted">Auto-repair after each win: +${state.run.mods.postBattleHeal} HP to alive agents.</p>
+        <h3>下一场遭遇：节点 ${state.run.nodeIndex + 1} - ${node ? node.label : "未知"}</h3>
+        <p>${node ? getDangerLabel(node.danger) : ""} 威胁等级。预测敌方：${threatLabels.join(" / ")}。</p>
+        <p class="muted">每次胜利后自动修复：存活特工恢复 +${state.run.mods.postBattleHeal} 生命。</p>
       </article>
 
       ${
         bossTemplate
           ? `
         <article class="panel boss-dossier" style="margin-bottom:12px;">
-          <h3>Boss Dossier: ${bossTemplate.name}</h3>
+          <h3>首领档案：${bossTemplate.name}</h3>
           <p class="muted">${bossTemplate.role}</p>
           <ul>
             ${bossTemplate.dossier.map((line) => `<li>${line}</li>`).join("")}
@@ -1653,18 +1685,18 @@ function renderSquad() {
             return `
               <article class="card ${checked ? "selected" : ""} ${dead ? "dead" : ""}">
                 <h3>${agent.name}</h3>
-                <p>${agent.role}</p>
+                <p>${getRoleLabel(agent.role)}</p>
                 <div class="stat-row">
-                  <span class="stat-pill">HP ${agent.hp}/${agent.hpMax}</span>
-                  <span class="stat-pill">ATK ${agent.atk}</span>
-                  <span class="stat-pill">EN ${agent.energy}</span>
+                  <span class="stat-pill">生命 ${agent.hp}/${agent.hpMax}</span>
+                  <span class="stat-pill">攻击 ${agent.atk}</span>
+                  <span class="stat-pill">能量 ${agent.energy}</span>
                 </div>
                 ${renderHpBar(agent.hp, agent.hpMax, "ally")}
-                <p class="muted" style="margin-top:8px;">Skill: ${agent.skill.title} (${skillCost} EN)</p>
+                <p class="muted" style="margin-top:8px;">技能：${agent.skill.title}（消耗 ${skillCost} 能量）</p>
                 <p class="muted">${agent.passive}</p>
                 <label class="row" style="margin-top:10px;">
                   <input type="checkbox" data-agent-toggle="${agent.id}" ${checked} ${dead ? "disabled" : ""} />
-                  <span>${dead ? "Offline" : "Deploy"}</span>
+                  <span>${dead ? "离线" : "部署"}</span>
                 </label>
               </article>
             `;
@@ -1672,20 +1704,20 @@ function renderSquad() {
           .join("")}
       </div>
 
-      <h3 style="margin-top:14px;">Directive Stack</h3>
+      <h3 style="margin-top:14px;">指令栈</h3>
       ${renderDirectiveList()}
 
       <div class="row" style="margin-top:12px;">
-        <button class="btn primary" data-action="deploy" ${deployDisabled ? "disabled" : ""}>Deploy to Node</button>
-        <button class="btn warn" data-action="abort-run">Abort Run</button>
+        <button class="btn primary" data-action="deploy" ${deployDisabled ? "disabled" : ""}>部署到节点</button>
+        <button class="btn warn" data-action="abort-run">终止行动</button>
       </div>
 
       ${
         operationPlan && !operationPlan.selectedId
-          ? '<p class="muted">Pick one Node Protocol before deployment.</p>'
+          ? '<p class="muted">部署前请先选择一个节点协议。</p>'
           : ""
       }
-      ${aliveCount === 0 ? '<p class="muted">All agents are offline. This run cannot continue.</p>' : ""}
+      ${aliveCount === 0 ? '<p class="muted">所有特工均已离线，本次行动无法继续。</p>' : ""}
     </section>
   `;
 }
@@ -1712,38 +1744,38 @@ function renderBattle() {
 
   const enemyStatusTags = [];
   if (enemy.armor > 0) {
-    enemyStatusTags.push(`Armor ${enemy.armor}`);
+    enemyStatusTags.push(`装甲 ${enemy.armor}`);
   }
   if (enemy.charge > 0) {
-    enemyStatusTags.push(`Charge ${enemy.charge}`);
+    enemyStatusTags.push(`充能 ${enemy.charge}`);
   }
   if (enemy.status.exposed > 0) {
-    enemyStatusTags.push(`Exposed ${enemy.status.exposed}`);
+    enemyStatusTags.push(`破绽 ${enemy.status.exposed}`);
   }
   if (enemy.bossState) {
-    enemyStatusTags.push(`Phase ${enemy.bossState.phase}/3`);
+    enemyStatusTags.push(`阶段 ${enemy.bossState.phase}/3`);
   }
 
   screenRoot.innerHTML = `
     <section>
       <div class="row spread">
-        <h2 class="screen-title">Node ${state.run.nodeIndex + 1} - ${node ? node.label : "Battle"}</h2>
-        <small>Turn ${state.battle.turn}</small>
+        <h2 class="screen-title">节点 ${state.run.nodeIndex + 1} - ${node ? node.label : "战斗"}</h2>
+        <small>回合 ${state.battle.turn}</small>
       </div>
 
       ${
         activeNodeOperation
-          ? `<p class="muted"><strong>Active Node Protocol:</strong> ${activeNodeOperation.title}</p>`
+          ? `<p class="muted"><strong>生效中的节点协议：</strong>${activeNodeOperation.title}</p>`
           : ""
       }
 
       <article class="intent-card">
-        <h3>Enemy Intent: ${enemy.intent.label}</h3>
+        <h3>敌方意图：${enemy.intent.label}</h3>
         <p>${enemy.intent.desc}</p>
         <div class="chip-row">
-          <span class="chip ${intentThreatClass}">Threat ${enemy.intent.threat || "medium"}</span>
-          <span class="chip">Likely target: ${intentTarget}</span>
-          <span class="chip">Forecast: ${intentForecast}</span>
+          <span class="chip ${intentThreatClass}">威胁 ${getThreatLabel(enemy.intent.threat || "medium")}</span>
+          <span class="chip">可能目标：${intentTarget}</span>
+          <span class="chip">效果预估：${intentForecast}</span>
         </div>
       </article>
 
@@ -1758,19 +1790,19 @@ function renderBattle() {
             return `
               <article class="card ${selected ? "selected" : ""}">
                 <h3>${agent.name}</h3>
-                <p>${agent.role}</p>
+                <p>${getRoleLabel(agent.role)}</p>
                 <div class="stat-row">
-                  <span class="stat-pill">HP ${agent.hp}/${agent.hpMax}</span>
-                  <span class="stat-pill">ATK ${agent.atk}</span>
-                  <span class="stat-pill">EN ${agent.energy}</span>
+                  <span class="stat-pill">生命 ${agent.hp}/${agent.hpMax}</span>
+                  <span class="stat-pill">攻击 ${agent.atk}</span>
+                  <span class="stat-pill">能量 ${agent.energy}</span>
                 </div>
                 ${renderHpBar(agent.hp, agent.hpMax, "ally")}
                 ${statusTags.length > 0 ? `<div class="chip-row" style="margin-top:8px;">${statusTags
                   .map((tag) => `<span class="chip">${tag}</span>`)
-                  .join("")}</div>` : '<p class="muted" style="margin-top:8px;">No active status effects.</p>'}
+                  .join("")}</div>` : '<p class="muted" style="margin-top:8px;">当前无状态效果。</p>'}
                 <p class="muted" style="margin-top:8px;">${agent.skill.title}: ${agent.skill.desc}</p>
                 <div class="row" style="margin-top:10px;">
-                  <button class="btn" data-action="select-actor" data-agent-id="${agent.id}">Control</button>
+                  <button class="btn" data-action="select-actor" data-agent-id="${agent.id}">操控</button>
                 </div>
               </article>
             `;
@@ -1781,13 +1813,13 @@ function renderBattle() {
           <h3>${enemy.name}</h3>
           <p>${enemy.role}</p>
           <div class="stat-row">
-            <span class="stat-pill">HP ${enemy.hp}/${enemy.hpMax}</span>
-            <span class="stat-pill">ATK ${enemy.atk}</span>
+            <span class="stat-pill">生命 ${enemy.hp}/${enemy.hpMax}</span>
+            <span class="stat-pill">攻击 ${enemy.atk}</span>
           </div>
           ${renderHpBar(enemy.hp, enemy.hpMax, "enemy")}
           ${enemyStatusTags.length > 0 ? `<div class="chip-row" style="margin-top:8px;">${enemyStatusTags
             .map((tag) => `<span class="chip">${tag}</span>`)
-            .join("")}</div>` : '<p class="muted" style="margin-top:8px;">No active enemy modifiers.</p>'}
+            .join("")}</div>` : '<p class="muted" style="margin-top:8px;">敌方当前无额外修正。</p>'}
           ${
             enemy.bossState && enemy.dossier.length > 0
               ? `<p class="muted" style="margin-top:8px;">${enemy.dossier[enemy.bossState.phase - 1] || enemy.dossier[0]}</p>`
@@ -1800,7 +1832,7 @@ function renderBattle() {
         state.battle.lastResolution
           ? `
         <article class="panel combat-summary" style="margin-bottom:10px;">
-          <h3>Turn ${state.battle.lastResolution.turn} Recap</h3>
+          <h3>第 ${state.battle.lastResolution.turn} 回合复盘</h3>
           <p>${state.battle.lastResolution.player}</p>
           <p>${state.battle.lastResolution.enemy}</p>
         </article>
@@ -1809,16 +1841,16 @@ function renderBattle() {
       }
 
       <div class="actions">
-        <button class="btn primary" data-action="do-attack">Attack (+1 EN)</button>
-        <button class="btn" data-action="do-defend">Defend (+1 EN)</button>
+        <button class="btn primary" data-action="do-attack">攻击（+1 能量）</button>
+        <button class="btn" data-action="do-defend">防御（+1 能量）</button>
         <button class="btn" data-action="do-skill" ${skillDisabled ? "disabled" : ""}>${
-          actor ? actor.skill.title : "Skill"
-        } (-${skillCost} EN)</button>
-        <button class="btn" data-action="do-burst" ${burstDisabled ? "disabled" : ""}>Sync Burst (-3 EN)</button>
+          actor ? actor.skill.title : "技能"
+        }（-${skillCost} 能量）</button>
+        <button class="btn" data-action="do-burst" ${burstDisabled ? "disabled" : ""}>同步爆发（-3 能量）</button>
       </div>
 
-      <p style="margin-top:12px;">Selected actor: <strong>${actor ? actor.name : "None"}</strong></p>
-      <h3 style="margin-top:14px;">Directive Stack</h3>
+      <p style="margin-top:12px;">当前操控：<strong>${actor ? actor.name : "无"}</strong></p>
+      <h3 style="margin-top:14px;">指令栈</h3>
       ${renderDirectiveList()}
     </section>
   `;
@@ -1831,8 +1863,8 @@ function renderReward() {
 
   screenRoot.innerHTML = `
     <section>
-      <h2 class="screen-title">Directive Reward</h2>
-      <p>Choose one upgrade before Node ${state.run.nodeIndex + 2}.</p>
+      <h2 class="screen-title">指令奖励</h2>
+      <p>进入节点 ${state.run.nodeIndex + 2} 前，选择一项升级。</p>
       <div class="reward-grid">
         ${state.pendingRewards
           .map(
@@ -1840,13 +1872,13 @@ function renderReward() {
               <article class="card">
                 <h3>${reward.title}</h3>
                 <p>${reward.desc}</p>
-                <button class="btn primary" data-action="pick-reward" data-reward-id="${reward.id}">Install</button>
+                <button class="btn primary" data-action="pick-reward" data-reward-id="${reward.id}">安装</button>
               </article>
             `
           )
           .join("")}
       </div>
-      <h3 style="margin-top:14px;">Current Directives</h3>
+      <h3 style="margin-top:14px;">当前指令</h3>
       ${renderDirectiveList()}
     </section>
   `;
@@ -1854,10 +1886,10 @@ function renderReward() {
 
 function renderRunEnd() {
   const isWin = state.runResult === "victory";
-  const title = isWin ? "Run Complete" : "Run Failed";
+  const title = isWin ? "行动完成" : "行动失败";
   const subtitle = isWin
-    ? "Silent Core collapsed. Squad extracted."
-    : "Squad wiped before core neutralization.";
+    ? "寂静核心已崩塌，小队成功撤离。"
+    : "核心中和前小队已被歼灭。";
 
   const directives =
     state.run && Object.keys(state.run.rewardTally).length > 0
@@ -1867,10 +1899,10 @@ function renderRunEnd() {
             if (!reward) {
               return "";
             }
-            return `<li>${reward.title}${count > 1 ? ` x${count}` : ""}</li>`;
+            return `<li>${reward.title}${count > 1 ? ` ×${count}` : ""}</li>`;
           })
           .join("")
-      : "<li>No persistent directives were installed.</li>";
+      : "<li>未安装任何常驻指令。</li>";
 
   const clearedNodes = isWin
     ? state.run.maxNode
@@ -1882,14 +1914,14 @@ function renderRunEnd() {
     <section>
       <h2 class="screen-title">${title}</h2>
       <p>${subtitle}</p>
-      <p class="muted">Nodes cleared: ${clearedNodes}/${state.run ? state.run.maxNode : NODE_PLAN.length}</p>
+      <p class="muted">已通关节点：${clearedNodes}/${state.run ? state.run.maxNode : NODE_PLAN.length}</p>
 
-      <h3>Installed Directives</h3>
+      <h3>已安装指令</h3>
       <ul>${directives}</ul>
 
       <div class="row" style="margin-top:12px;">
-        <button class="btn primary" data-action="start-run">Start New Run</button>
-        <button class="btn" data-action="to-title">Back to Title</button>
+        <button class="btn primary" data-action="start-run">开始新行动</button>
+        <button class="btn" data-action="to-title">返回标题</button>
       </div>
     </section>
   `;

@@ -1,109 +1,55 @@
-# Silent Protocol MVP
+# 寂静协议 原型版
 
-Web-playable prototype for an **AGI gacha-inspired roguelite + light squad tactics** loop, built to stay WeChat-mini-game-friendly.
+一个可在网页直接游玩的 **智能体抽卡风轻度肉鸽 + 小队战术** 原型，技术形态保持微信小游戏友好：纯静态、无后端、可本地直接运行。
 
-## MVP Intent
-- Prioritize `A + C`: build爽感 + 少量策略感
-- Keep scope tight and demo-first
-- Use placeholder visuals and readable systems
-- Run fully local with **no backend**
+## 项目目标
+- 优先实现 `A + C`：构筑爽感 + 少量策略感。
+- 严格控制范围，以可试玩演示为第一优先级。
+- 用最小占位资源做出清晰、可读、可反馈的战斗流程。
+- 全流程离线可跑，不依赖服务端。
 
-## Current Playable Slice
-- Static single-page app (`HTML/CSS/JS`)
-- Full run flow:
-  - Title -> Squad Assembly -> Node Protocol Choice -> Battle -> Directive Reward -> Run End
-- 4-agent roster with distinct roles:
-  - `Tactician`, `Vanguard`, `Skirmisher`, `Support`
-- Deploy up to **3 agents** per encounter
-- 4-node run structure:
-  - 2 skirmish nodes, 1 elite node, 1 boss node
-- Pre-battle node protocol choice each node (pick 1 risk/reward modifier before deploy)
-- Enemy archetypes with telegraphed intents (`Strike`, `Pierce`, `Sweep`, `Jam`, etc.)
-- Boss identity pass on `Protocol Prime`:
-  - Multi-phase escalation (phase shifts at 70% and 35% HP)
-  - Signature intents: `Lockdown Pulse`, `Annihilate Beam`
-  - Readability panel: integrity %, current phase, next shift threshold, next phase signature
-- Tactical combat actions:
-  - `Attack`, `Defend`, role `Skill`, `Sync Burst`
-- Status/economy layer:
-  - `Guard`, `Barrier`, `Jam`, `Exposed`, energy costs
-- Reward/build layer:
-  - Between-node directive choices including role-specific upgrades
-- Battle readability pass:
-  - HP bars
-  - Intent threat + likely target + effect forecast
-  - Per-turn recap panel
+## 当前可玩内容
+- 单页静态应用（`HTML/CSS/JS`）。
+- 完整单局循环：标题 -> 小队编成 -> 节点协议 -> 战斗 -> 指令奖励 -> 行动结算。
+- 4 名可选特工（最多上阵 3 名）：`战术型`、`先锋型`、`游击型`、`支援型`。
+- 4 节点行动路径：2 个遭遇战、1 个精英战、1 个首领战。
+- 每个节点部署前必须选择 1 个“节点协议”（风险/收益修正）。
+- 敌方具备可预告意图与威胁预估。
+- 首领“协议主核”具备多阶段机制与阶段提示面板。
+- 节点间可选指令奖励，形成轻量构筑分化。
 
-## Deployment Status
-Status as of **March 9, 2026**:
-- No live URL yet
-- No git remote configured yet
-- GitHub Pages workflow is present at `.github/workflows/deploy-pages.yml`
-- Deployment path is static, no backend and no npm/build chain
-
-## Run Locally
-Recommended:
+## 本地运行
 ```bash
 cd /Users/levy/.openclaw/workspace/projects/silent-protocol-mvp
 python3 -m http.server 8080
 ```
-Then open:
+浏览器打开：
 - `http://localhost:8080`
 
-Quick open (also works for this MVP):
-- Open `index.html` directly in a browser.
+也可直接双击打开 `index.html` 进行快速试玩。
 
-Sanity check JS syntax:
-```bash
-node --check app.js
-```
+## 基本操作
+- 标题页点击“开始行动”。
+- 小队编成页选择特工（最多 3 名）。
+- 部署前先选择一个节点协议。
+- 战斗中选择当前操控特工，并执行：`攻击`、`防御`、`技能`、`同步爆发`。
+- 非最终战胜利后选择 1 个指令奖励。
+- 清空全部 4 个节点即行动胜利。
 
-## Controls
-- Start run from title screen
-- Select squad members on Squad Assembly (up to 3)
-- Select one `Node Protocol` before each deployment (mandatory)
-- Deploy to current node
-- In battle:
-  - Click `Control` on an agent
-  - Use action buttons (`Attack`, `Defend`, `Skill`, `Sync Burst`)
-- Choose one directive reward after each non-final win
-- Clear all 4 nodes to win the run
+## 项目文件
+- `index.html`：页面结构与主要容器。
+- `styles.css`：界面样式与布局。
+- `app.js`：状态管理、战斗结算、奖励逻辑、界面渲染。
+- `DESIGN.md`：原型范围与玩法设计快照。
 
-## Project Files
-- `README.md`: quick setup + current playable scope
-- `DESIGN.md`: MVP scope and loop notes
-- `index.html`: app shell
-- `styles.css`: visual theme + layout + combat UI blocks
-- `app.js`: run state, encounters, combat, rewards, screen rendering
+## 发布与试玩
+本仓库已配置 `main` 分支推送触发的 GitHub Pages 自动部署。
 
-## Notes
-- Architecture stays intentionally simple for fast iteration.
-- No persistence yet; each browser refresh resets run state.
+- 仓库地址：`https://github.com/levy0834/silent-protocol-mvp`
+- 试玩地址：`https://levy0834.github.io/silent-protocol-mvp/`
 
-## Deployment (GitHub Pages)
-No backend or build step is required. The workflow stages static files from repo root and deploys with GitHub Actions.
+如需手动重新触发部署，可在 GitHub 的“Actions”中执行 `Deploy GitHub Pages` 工作流。
 
-1. Create first commit:
-```bash
-git add .
-git commit -m "Initial playable MVP with Pages deployment scaffold"
-```
-2. Create and push the GitHub repo:
-```bash
-gh repo create silent-protocol-mvp --public --source=. --remote=origin --push
-```
-3. In GitHub, open `Settings -> Pages -> Build and deployment -> Source` and set source to **GitHub Actions**.
-4. Push to `main` (the command above already does this once):
-```bash
-git push
-```
-5. Wait for workflow **Deploy GitHub Pages** to pass in `Actions`.
-6. Open:
-   - `https://<github-username>.github.io/silent-protocol-mvp/`
-
-If you do not use `gh repo create`, push manually:
-```bash
-git branch -M main
-git remote add origin git@github.com:<github-username>/silent-protocol-mvp.git
-git push -u origin main
-```
+## 说明
+- 这是演示优先的原型版本，代码结构保持轻量以便快速迭代。
+- 暂不包含存档与持久化成长，刷新页面会重置当前行动。
