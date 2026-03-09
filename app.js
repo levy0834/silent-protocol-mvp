@@ -347,6 +347,13 @@ const THREAT_LABELS = {
   extreme: "极高",
 };
 
+const THREAT_DIRECTIVES = {
+  low: "窗口稳态",
+  medium: "准备承伤",
+  high: "优先防御",
+  extreme: "立即减伤",
+};
+
 const ROLE_VISUALS = {
   Tactician: {
     badge: "战术",
@@ -456,6 +463,7 @@ const BATTLE_EFFECT_LABELS = {
   hit: "受击",
   heal: "修复",
   shield: "护盾",
+  status: "状态",
   "phase-shift": "相位",
   defeat: "离线",
 };
@@ -466,6 +474,7 @@ const BATTLE_EFFECT_DURATION_MS = {
   hit: 380,
   heal: 620,
   shield: 560,
+  status: 660,
   "phase-shift": 700,
   defeat: 880,
 };
@@ -475,6 +484,7 @@ const BATTLE_ARENA_EFFECT_DURATION_MS = {
   "ally-drive": 500,
   "enemy-drive": 540,
   "intent-shift": 660,
+  "turn-shift": 620,
   "phase-shift": 620,
   "threat-surge": 700,
 };
@@ -484,12 +494,22 @@ const BATTLE_FLOAT_DURATION_MS = {
   damage: 980,
   heal: 1040,
   shield: 1080,
+  status: 1180,
   phase: 1240,
   defeat: 1320,
 };
 
 const BATTLE_FLOAT_STAGGER_MS = 110;
 const BATTLE_FLOAT_X_OFFSETS = [0, -14, 14, -22, 22];
+const BATTLE_FLOAT_LABELS = {
+  attack: "行动",
+  damage: "受击",
+  heal: "修复",
+  shield: "护盾",
+  status: "状态",
+  phase: "阶段",
+  defeat: "结果",
+};
 
 const BOSS_THREAT_FEEDBACK_TEXT = {
   high: "威胁升高",
@@ -647,6 +667,10 @@ function getRoleLabel(role) {
 
 function getThreatLabel(threat) {
   return THREAT_LABELS[threat] || threat;
+}
+
+function getThreatDirective(threat) {
+  return THREAT_DIRECTIVES[threat] || THREAT_DIRECTIVES.medium;
 }
 
 function getRoleVisual(role) {
@@ -874,6 +898,65 @@ function getBattleFloatingTextDuration(kind) {
   return BATTLE_FLOAT_DURATION_MS[kind] || 960;
 }
 
+function buildBattleFloatingText(kind, value, customText = "") {
+  const overrideText = (customText || "").trim();
+  const label = BATTLE_FLOAT_LABELS[kind] || BATTLE_FLOAT_LABELS.status;
+
+  if (kind === "attack") {
+    return {
+      label,
+      text: overrideText || "进攻",
+    };
+  }
+
+  if (kind === "damage") {
+    return {
+      label,
+      text: overrideText || `-${value}`,
+    };
+  }
+
+  if (kind === "heal") {
+    return {
+      label,
+      text: overrideText || `+${value}`,
+    };
+  }
+
+  if (kind === "shield") {
+    return {
+      label,
+      text: overrideText || `+${value}`,
+    };
+  }
+
+  if (kind === "status") {
+    return {
+      label,
+      text: overrideText || "变更",
+    };
+  }
+
+  if (kind === "phase") {
+    return {
+      label,
+      text: overrideText || "相位切换",
+    };
+  }
+
+  if (kind === "defeat") {
+    return {
+      label,
+      text: overrideText || "离线",
+    };
+  }
+
+  return {
+    label: BATTLE_FLOAT_LABELS.status,
+    text: overrideText || `${value}`,
+  };
+}
+
 function filterActiveFxEntries(entries, now = Date.now()) {
   if (!Array.isArray(entries) || entries.length === 0) {
     return [];
@@ -1048,24 +1131,7 @@ function addBattleFloatingText(side, targetId, kind, amount, customText = "") {
     return;
   }
 
-  let text = customText;
-  if (!text) {
-    if (kind === "attack") {
-      text = "进攻";
-    }
-    if (kind === "damage") {
-      text = `-${value}`;
-    }
-    if (kind === "heal") {
-      text = `+${value}`;
-    }
-    if (kind === "shield") {
-      text = `护盾 +${value}`;
-    }
-    if (kind === "phase") {
-      text = "相位切换";
-    }
-  }
+  const { label, text } = buildBattleFloatingText(kind, value, customText);
 
   if (!text) {
     return;
@@ -1078,16 +1144,20 @@ function addBattleFloatingText(side, targetId, kind, amount, customText = "") {
   ).length;
   const delayMs = Math.min(320, activeOnTarget * BATTLE_FLOAT_STAGGER_MS);
   const durationMs = getBattleFloatingTextDuration(kind);
+  const offsetIndex = activeOnTarget % BATTLE_FLOAT_X_OFFSETS.length;
+  const offsetY = Math.min(26, activeOnTarget * 8);
 
   fx.floatingTexts.push({
     id: fx.nextTextId,
     side,
     targetId,
     kind,
+    label,
     text,
     delayMs,
     durationMs,
-    offsetX: BATTLE_FLOAT_X_OFFSETS[activeOnTarget % BATTLE_FLOAT_X_OFFSETS.length],
+    offsetX: BATTLE_FLOAT_X_OFFSETS[offsetIndex],
+    offsetY,
     createdAt: now,
     expiresAt: now + delayMs + durationMs + 80,
   });
@@ -1098,6 +1168,14 @@ function addBattleFloatingText(side, targetId, kind, amount, customText = "") {
 function addBattleAttackCue(side, targetId, customText = "进攻") {
   addBattleUnitEffect(side, targetId, "attack");
   addBattleFloatingText(side, targetId, "attack", 0, customText);
+}
+
+function addBattleStatusCue(side, targetId, text) {
+  if (!targetId || !text) {
+    return;
+  }
+  addBattleUnitEffect(side, targetId, "status");
+  addBattleFloatingText(side, targetId, "status", 0, text);
 }
 
 function getBattleUnitEffectEntries(side, targetId, now = Date.now()) {
@@ -1130,6 +1208,15 @@ function getBattleArenaFxClass() {
   return getUniqueEffectNames(entries, "asc")
     .map((effect) => `fx-arena-${effect}`)
     .join(" ");
+}
+
+function hasBattleArenaEffect(effect, now = Date.now()) {
+  if (!state.battle || !state.battle.fx || !effect) {
+    return false;
+  }
+  return filterActiveFxEntries(state.battle.fx.arenaEffects, now).some(
+    (entry) => entry.effect === effect
+  );
 }
 
 function getThreatIntensityPct(threat) {
@@ -1171,11 +1258,11 @@ function renderBattleFloatingTexts(side, targetId) {
   }
 
   return `
-    <div class="floating-text-layer" aria-hidden="true">
+    <div class="floating-text-layer side-${side}" aria-hidden="true">
       ${items
         .map(
           (entry, index) =>
-            `<span class="floating-text kind-${entry.kind}" style="--float-index:${index}; --float-delay:${entry.delayMs}ms; --float-duration:${entry.durationMs}ms; --float-x:${entry.offsetX}px;">${entry.text}</span>`
+            `<span class="floating-text kind-${entry.kind}" style="--float-index:${index}; --float-delay:${entry.delayMs}ms; --float-duration:${entry.durationMs}ms; --float-x:${entry.offsetX}px; --float-y:${entry.offsetY || 0}px;"><span class="floating-text-label">${entry.label || "反馈"}</span><span class="floating-text-value">${entry.text}</span></span>`
         )
         .join("")}
     </div>
@@ -1566,6 +1653,7 @@ function deployBattle() {
     fx: createBattleFxState(),
   };
   state.screen = "battle";
+  addBattleArenaEffect("turn-shift");
 
   if (enemy.bossState) {
     addBattleArenaEffect("phase-shift");
@@ -1619,6 +1707,7 @@ function gainEnergy(agent, amount) {
 
   if (agent.status.jam > 0) {
     agent.status.jam -= 1;
+    addBattleStatusCue("ally", agent.id, "能量受阻");
     addLog(`${agent.name}受到干扰，本回合无法获得能量。`);
     return;
   }
@@ -1662,6 +1751,10 @@ function applyDamageToEnemy(rawDamage, sourceLabel) {
 function applyDamageToAgent(agent, rawDamage, options = {}) {
   let damage = Math.max(1, rawDamage);
   const originalDamage = damage;
+
+  if (options.ignoreGuard && agent.status.guard > 0) {
+    addBattleStatusCue("ally", agent.id, "守势穿透");
+  }
 
   if (!options.ignoreGuard && agent.status.guard > 0) {
     damage = Math.max(1, damage - 2);
@@ -1921,6 +2014,7 @@ function executeEnemyTurn() {
       const damage = randInt(Math.max(1, enemy.atk - 2), enemy.atk);
       applyDamageToAgent(target, damage);
       target.status.jam += 1;
+      addBattleStatusCue("ally", target.id, "干扰 +1");
       addLog(`${enemy.name}对${target.name}施加了干扰。`);
     }
   }
@@ -1944,6 +2038,7 @@ function executeEnemyTurn() {
     enemy.armor += 1;
     addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "shield");
     addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "shield", 1);
+    addBattleStatusCue("enemy", ENEMY_STAGE_TARGET_ID, "充能 +3");
     addLog(`${enemy.name}进入过载：下次攻击伤害 +3。`);
   }
 
@@ -1954,6 +2049,7 @@ function executeEnemyTurn() {
     targets.forEach((target) => {
       applyDamageToAgent(target, damage);
       target.status.jam += 1;
+      addBattleStatusCue("ally", target.id, "干扰 +1");
     });
     enemy.armor += 2;
     addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "shield");
@@ -2022,6 +2118,7 @@ function executeSkill(actor) {
     applyDamageToEnemy(damage, actor.name);
     const exposeTurns = 2 + state.run.mods.tacticianExposeTurns;
     enemy.status.exposed = Math.max(enemy.status.exposed, exposeTurns);
+    addBattleStatusCue("enemy", ENEMY_STAGE_TARGET_ID, `破绽 +${exposeTurns}T`);
     addLog(`${actor.name}施加了 ${exposeTurns} 回合破绽。`);
     return;
   }
@@ -2032,6 +2129,7 @@ function executeSkill(actor) {
     actor.status.guard = Math.max(actor.status.guard, 2);
     actor.status.taunt = Math.max(actor.status.taunt, 2);
     actor.status.barrier += 3;
+    addBattleStatusCue("ally", actor.id, "守势 +2 · 嘲讽 +2");
     addBattleFloatingText("ally", actor.id, "shield", 0, "锚定");
     addBattleFloatingText("ally", actor.id, "shield", 3);
     addLog(`${actor.name}稳住前线（守势 + 嘲讽 + 护盾）。`);
@@ -2073,6 +2171,7 @@ function executeSkill(actor) {
     addBattleFloatingText("ally", actor.id, "heal", 0, "修补波");
     const healAmount = 6 + state.run.mods.supportHealBonus;
     const beforeHp = target.hp;
+    const hadJam = target.status.jam > 0;
     target.hp = Math.min(target.hpMax, target.hp + healAmount);
     target.status.barrier += 2;
     target.status.jam = 0;
@@ -2084,13 +2183,23 @@ function executeSkill(actor) {
     }
     addBattleUnitEffect("ally", target.id, "shield");
     addBattleFloatingText("ally", target.id, "shield", 2);
+    if (hadJam) {
+      addBattleStatusCue("ally", target.id, "净化");
+    }
     addLog(`${actor.name}为${target.name}恢复 ${recovered} 点生命并提供护盾。`);
 
     if (state.run.mods.supportCleanseAll) {
+      let cleansedCount = 0;
       getAliveAgents(state.run.squadIds).forEach((agent) => {
-        agent.status.jam = 0;
+        if (agent.status.jam > 0) {
+          agent.status.jam = 0;
+          cleansedCount += 1;
+          addBattleStatusCue("ally", agent.id, "净化");
+        }
       });
-      addLog("织机注入器为全队清除了干扰。");
+      if (cleansedCount > 0) {
+        addLog("织机注入器为全队清除了干扰。");
+      }
     }
   }
 }
@@ -2144,6 +2253,7 @@ function performAction(actionType) {
     addBattleArenaEffect("ally-drive");
     addBattleUnitEffect("ally", actor.id, "guard");
     addBattleUnitEffect("ally", actor.id, "shield");
+    addBattleStatusCue("ally", actor.id, "守势 +1");
     addBattleFloatingText("ally", actor.id, "shield", 0, "守势");
     actor.status.guard = Math.max(actor.status.guard, 1);
     gainEnergy(actor, 1);
@@ -2235,6 +2345,7 @@ function performAction(actionType) {
   }
 
   state.battle.turn += 1;
+  addBattleArenaEffect("turn-shift");
   render();
 }
 
@@ -2573,7 +2684,14 @@ function renderEnemyBattlePuppet(enemy) {
   `;
 }
 
-function renderBattleStage(squad, enemy, selectedActorId, intentThreat = "medium") {
+function renderBattleStage(
+  squad,
+  enemy,
+  selectedActorId,
+  intentThreat = "medium",
+  turn = 1,
+  intentTarget = "未知"
+) {
   const arenaFxClass = getBattleArenaFxClass();
   const bossClass = enemy.bossState ? "boss-encounter" : "";
   const phaseClass = enemy.bossState ? `boss-phase-${enemy.bossState.phase}` : "";
@@ -2585,12 +2703,17 @@ function renderBattleStage(squad, enemy, selectedActorId, intentThreat = "medium
   const stageTempoClass = getBattleTempoClass(squad);
   const intentEcho = enemy.intent ? `${getIntentIcon(enemy.intent.id)} ${enemy.intent.label}` : "例程未知";
   const enemyLaneLabel = enemy.bossState ? "敌方主核" : "敌方单位";
+  const turnLabel = `回合 ${Math.max(1, turn || 1)}`;
+  const phaseLabel = enemy.bossState ? `阶段 ${enemy.bossState.phase}/3` : "常规遭遇";
+  const focusPulseClass = hasBattleArenaEffect("turn-shift") ? "pulse" : "";
+  const phasePulseClass = hasBattleArenaEffect("phase-shift") ? "pulse" : "";
+  const threatPulseClass = hasBattleArenaEffect("threat-surge") ? "pulse" : "";
 
   return `
     <article class="battle-stage panel panel-visual ${arenaFxClass} ${bossClass} ${phaseClass} ${threatClass} ${stageTempoClass}">
       <div class="battle-stage-head" aria-hidden="true">
         <span class="battle-lane-tag allies">我方小队 · ${squad.length} 单位</span>
-        <span class="battle-stage-focus">正面对峙</span>
+        <span class="battle-stage-focus ${focusPulseClass}">${turnLabel}</span>
         <span class="battle-lane-tag enemy">${enemyLaneLabel}</span>
       </div>
       <div class="battle-stage-grid">
@@ -2613,10 +2736,13 @@ function renderBattleStage(squad, enemy, selectedActorId, intentThreat = "medium
             <span class="battle-threat-fill" style="width:${threatIntensity}%"></span>
           </span>
           <span class="battle-intent-echo">${intentEcho}</span>
+          <span class="battle-intent-target">目标：${intentTarget}</span>
+          <span class="battle-phase-echo ${phasePulseClass}">${phaseLabel}</span>
         </div>
         <div class="battle-lane enemy">
           <div class="battle-slot enemy-slot">
             <span class="battle-slot-label enemy">${enemy.bossState ? "主核目标" : "敌方目标"}</span>
+            <span class="battle-threat-callout ${threatClass} ${threatPulseClass}">${threatLabel}威胁</span>
             ${renderEnemyBattlePuppet(enemy)}
           </div>
         </div>
@@ -3051,12 +3177,17 @@ function renderBattle() {
   const burstDisabled = actionLocked || !actor || actor.energy < 3;
   const intentTarget = getLikelyIntentTarget(enemy.intent.id);
   const intentForecast = getIntentForecast(enemy);
-  const intentThreatClass = `intent-${enemy.intent.threat || "medium"}`;
+  const intentThreatKey = enemy.intent.threat || "medium";
+  const intentThreatClass = `intent-${intentThreatKey}`;
+  const threatDirective = getThreatDirective(intentThreatKey);
   const intentIcon = getIntentIcon(enemy.intent.id);
   const activeNodeOperationVisual = activeNodeOperation
     ? getNodeOperationVisual(activeNodeOperation.id)
     : null;
   const enemyVisual = getEnemyVisual(enemy.id);
+  const turnPulseClass = hasBattleArenaEffect("turn-shift") ? "pulse" : "";
+  const phasePulseClass = hasBattleArenaEffect("phase-shift") ? "pulse" : "";
+  const phaseReadout = enemy.bossState ? `阶段 ${enemy.bossState.phase}/3` : "常规遭遇";
 
   const enemyStatusTags = [];
   if (enemy.armor > 0) {
@@ -3076,7 +3207,11 @@ function renderBattle() {
     <section class="battle-screen">
       <div class="row spread">
         <h2 class="screen-title">节点 ${state.run.nodeIndex + 1} - ${node ? node.label : "战斗"}</h2>
-        <small>回合 ${state.battle.turn}</small>
+        <div class="battle-cycle-readout" aria-live="polite">
+          <span class="battle-cycle-chip turn ${turnPulseClass}">回合 ${state.battle.turn}</span>
+          <span class="battle-cycle-chip phase ${phasePulseClass}">${phaseReadout}</span>
+          <span class="battle-cycle-chip threat threat-${intentThreatKey}">威胁 ${getThreatLabel(intentThreatKey)} · ${threatDirective}</span>
+        </div>
       </div>
       ${renderStageProgress(state.run.nodeIndex, state.run.nodeIndex)}
 
@@ -3102,16 +3237,25 @@ function renderBattle() {
           <span class="intent-icon-badge">${intentIcon}</span>
         </div>
         <p>${enemy.intent.desc}</p>
+        <p class="intent-callout">即将执行：<strong>${enemy.intent.label}</strong> → <strong>${intentTarget}</strong></p>
         <div class="chip-row">
-          <span class="chip ${intentThreatClass}">威胁 ${getThreatLabel(enemy.intent.threat || "medium")}</span>
-          <span class="chip">可能目标：${intentTarget}</span>
+          <span class="chip ${intentThreatClass}">威胁 ${getThreatLabel(intentThreatKey)} · ${threatDirective}</span>
+          <span class="chip intent-target-chip">可能目标：${intentTarget}</span>
           <span class="chip intent-forecast-chip">效果预估：${intentForecast}</span>
+          ${enemy.bossState ? `<span class="chip intent-phase-chip">主核阶段 ${enemy.bossState.phase}/3</span>` : ""}
         </div>
         ${renderIntentSequenceTrack(enemy, 4)}
       </article>
 
       ${renderBossBattleReadout(enemy)}
-      ${renderBattleStage(stagedSquad, enemy, state.battle.selectedActorId, enemy.intent.threat)}
+      ${renderBattleStage(
+        stagedSquad,
+        enemy,
+        state.battle.selectedActorId,
+        intentThreatKey,
+        state.battle.turn,
+        intentTarget
+      )}
 
       <div class="card-grid battle-grid" style="margin-bottom:10px;">
         ${squad
