@@ -1584,7 +1584,7 @@ function selectNodeOperation(operationId) {
   plan.selectedId = operationId;
   const operation = getNodeOperationById(operationId);
   if (operation) {
-    addLog(`已选择节点协议：${operation.title}。`, { phase: "node", tone: "info" });
+    addLog(`已锁定节点协议：${operation.title}。`, { phase: "node", tone: "info" });
     if (
       state.run.onboarding &&
       state.run.onboarding.guidanceActive &&
@@ -3367,7 +3367,7 @@ function renderOuterLoopRail(view, options = {}) {
 function renderFlowChain(fromNodeIndex, toNodeIndex, rewardTitle = "") {
   const fromNode = Math.max(1, fromNodeIndex || 1);
   const toNode = Math.max(fromNode, toNodeIndex || fromNode);
-  const rewardStep = rewardTitle ? `安装 ${rewardTitle}` : "选择 1 项指令";
+  const rewardStep = rewardTitle ? `安装 ${rewardTitle}` : "安装 1 项指令";
   const rewardClass = rewardTitle ? "complete" : "pending";
 
   return `
@@ -3651,7 +3651,7 @@ function renderNodeOperationPanel() {
                 <button class="btn ${selected ? "" : "primary"}" data-action="pick-node-operation" data-operation-id="${operation.id}">
                   ${
                     selected
-                      ? "已选择"
+                      ? "已锁定"
                       : hasPicked
                         ? "切换为此方案"
                         : "选择此方案"
@@ -3742,14 +3742,14 @@ function renderTitle() {
           <p>组建一支 3 人智能体突击小队，击穿 4 个递进节点，并摧毁寂静核心。</p>
           <p class="title-goal">本局目标：每个节点完成“选协议 → 打赢战斗 → 选 1 项指令”，清完 4 节点即胜利。</p>
           <article class="title-quickstart">
-            <h3>首次行动速览（约 2 分钟）</h3>
+            <h3>首轮行动速览（约 2 分钟）</h3>
             <ol class="title-steps">
               <li>节点准备：锁定 1 项协议，并确认部署位。</li>
               <li>节点战斗：每回合选择 1 个行动，先看敌方意图。</li>
               <li>指令奖励：胜利后安装 1 项升级，再推进下一节点。</li>
             </ol>
           </article>
-          <p class="muted">纯本地静态原型，无后端。聚焦角色协同与快节奏战术短局。</p>
+          <p class="muted">纯本地静态原型，无需后端。聚焦角色协同与快节奏战术短局。</p>
           <div class="row">
             <button class="btn primary" data-action="start-run">开始行动（首轮约 2 分钟）</button>
           </div>
@@ -3879,7 +3879,7 @@ function renderSquad() {
 
       <article class="panel panel-visual stage-panel screen-stack-panel">
         <div class="row spread">
-          <h3>下一场遭遇：节点 ${state.run.nodeIndex + 1} - ${node ? node.label : "未知"}</h3>
+          <h3>下一场遭遇：节点 ${state.run.nodeIndex + 1} · ${node ? node.label : "未知"}</h3>
           ${renderStageBadge(node ? node.danger : null)}
         </div>
         <p class="muted">每次胜利后自动修复：存活特工恢复 +${state.run.mods.postBattleHeal} 生命。</p>
@@ -3904,7 +3904,7 @@ function renderSquad() {
           </article>
           <article class="node-brief-item">
             <small>协议状态</small>
-            <strong>${selectedOperation ? "已选择" : "待选择"}</strong>
+            <strong>${selectedOperation ? "已锁定" : "待锁定"}</strong>
           </article>
           <article class="node-brief-item">
             <small>可部署战力</small>
@@ -4016,7 +4016,7 @@ function renderSquad() {
 
       ${
         operationPlan && !operationPlan.selectedId
-          ? '<p class="muted">部署前请先选择一个节点协议。</p>'
+          ? '<p class="muted">部署前请先锁定 1 项节点协议。</p>'
           : ""
       }
       ${aliveCount === 0 ? '<p class="muted">所有特工均已离线，本次行动无法继续。</p>' : ""}
@@ -4086,7 +4086,7 @@ function renderBattle() {
         ? "结算完成，可继续决策。"
         : !actor
           ? "当前无可操控特工，操作已锁定。"
-          : "已进入指令窗口，可继续决策。";
+          : "已进入行动窗口，可继续决策。";
   const battleFinishTitle = finishPhase === "handoff" ? "节点清除完成" : "目标崩解";
   const battleFinishSubline =
     finishPhase === "handoff" ? "结算完成，正在解码可用指令。" : "敌方主链路已断开，正在回收战场残留。";
@@ -4126,7 +4126,7 @@ function renderBattle() {
   screenRoot.innerHTML = `
     <section class="${screenClass}">
       <div class="row spread screen-head">
-        <h2 class="screen-title">节点 ${state.run.nodeIndex + 1} - ${node ? node.label : "战斗"}</h2>
+        <h2 class="screen-title">节点 ${state.run.nodeIndex + 1} · ${node ? node.label : "战斗"}</h2>
         <div class="battle-cycle-readout" aria-live="polite">
           <span class="battle-cycle-chip turn ${turnPulseClass}">回合 ${state.battle.turn}</span>
           <span class="battle-cycle-chip phase ${phasePulseClass}">${phaseReadout}</span>
@@ -4330,7 +4330,7 @@ function renderReward() {
             ${renderStageBadge(nextNode ? nextNode.danger : null, "终局")}
           </div>
         </div>
-        <p>进入下一节点前，选择并安装一项升级指令。候选指令将按序解码。</p>
+        <p>进入下一节点前，选择并安装 1 项升级指令。候选指令将按序解码。</p>
         ${renderStageProgress(state.run.nodeIndex + 1, state.run.nodeIndex + 1)}
       </article>
       ${renderOuterLoopRail("reward", {
@@ -4364,7 +4364,7 @@ function renderReward() {
               <article class="panel panel-visual reward-empty">
                 <p class="muted">当前未解码到可安装指令。</p>
                 <p class="muted">${hasNextNode ? "将按基础配置推进至下一节点。" : "将按基础配置进入行动结算。"}</p>
-                <button class="btn" data-action="continue-without-reward">按基础配置推进</button>
+                <button class="btn primary" data-action="continue-without-reward">按基础配置继续</button>
               </article>
             `
             : state.pendingRewards
@@ -4415,7 +4415,7 @@ function renderRunEnd() {
             return `<li>${reward.title}${count > 1 ? ` ×${count}` : ""}</li>`;
           })
           .join("")
-      : "<li>未安装任何常驻指令。</li>";
+      : "<li>未安装任何指令。</li>";
 
   const clearedNodes = isWin
     ? state.run.maxNode
@@ -4462,7 +4462,7 @@ function renderRunEnd() {
 
       <div class="row end-action-row">
         <button class="btn primary" data-action="start-run">开始新行动</button>
-        <button class="btn" data-action="to-title">返回标题</button>
+        <button class="btn" data-action="to-title">返回标题页</button>
       </div>
     </section>
   `;
