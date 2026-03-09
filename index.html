@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Silent Protocol MVP</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <h1>Silent Protocol // MVP</h1>
+        <div id="run-info" class="run-info">No active run</div>
+      </header>
+
+      <main id="screen-root" class="screen-root" aria-live="polite"></main>
+
+      <aside class="log-panel">
+        <h2>Combat Log</h2>
+        <ul id="log-list"></ul>
+      </aside>
+    </div>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
