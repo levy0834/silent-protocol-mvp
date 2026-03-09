@@ -501,6 +501,9 @@ const BATTLE_FLOAT_DURATION_MS = {
 
 const BATTLE_FLOAT_STAGGER_MS = 110;
 const BATTLE_FLOAT_X_OFFSETS = [0, -14, 14, -22, 22];
+const BATTLE_DECISION_LOCK_MS = 340;
+const BATTLE_DECISION_READY_MS = 560;
+const BATTLE_ACTION_RECENT_MS = 780;
 const BATTLE_FLOAT_LABELS = {
   attack: "行动",
   damage: "受击",
@@ -880,10 +883,79 @@ function clearBattleFxTimer(fxState) {
 }
 
 function clearCurrentBattleFx() {
-  if (!state.battle || !state.battle.fx) {
+  if (!state.battle) {
+    return;
+  }
+  clearBattleFlowTimers(state.battle);
+  if (!state.battle.fx) {
     return;
   }
   clearBattleFxTimer(state.battle.fx);
+}
+
+function clearBattleFlowTimers(battleState = state.battle) {
+  if (!battleState) {
+    return;
+  }
+
+  if (battleState.decisionUnlockTimerId) {
+    window.clearTimeout(battleState.decisionUnlockTimerId);
+    battleState.decisionUnlockTimerId = null;
+  }
+  if (battleState.decisionReadyTimerId) {
+    window.clearTimeout(battleState.decisionReadyTimerId);
+    battleState.decisionReadyTimerId = null;
+  }
+}
+
+function isBattleDecisionLocked(battleState = state.battle, now = Date.now()) {
+  if (!battleState) {
+    return false;
+  }
+  return Boolean(battleState.decisionLockUntil && battleState.decisionLockUntil > now);
+}
+
+function markBattleActionFeedback(actionType, now = Date.now()) {
+  if (!state.battle || !actionType) {
+    return;
+  }
+  state.battle.lastActionType = actionType;
+  state.battle.lastActionUntil = now + BATTLE_ACTION_RECENT_MS;
+  state.battle.decisionReadyUntil = 0;
+  if (state.battle.decisionReadyTimerId) {
+    window.clearTimeout(state.battle.decisionReadyTimerId);
+    state.battle.decisionReadyTimerId = null;
+  }
+}
+
+function lockBattleDecisionWindow(durationMs = BATTLE_DECISION_LOCK_MS) {
+  if (!state.battle || durationMs <= 0) {
+    return;
+  }
+
+  const battleState = state.battle;
+  clearBattleFlowTimers(battleState);
+  battleState.decisionReadyUntil = 0;
+  battleState.decisionLockUntil = Date.now() + durationMs;
+
+  battleState.decisionUnlockTimerId = window.setTimeout(() => {
+    battleState.decisionUnlockTimerId = null;
+    if (state.screen !== "battle" || state.battle !== battleState) {
+      return;
+    }
+    battleState.decisionLockUntil = 0;
+    battleState.decisionReadyUntil = Date.now() + BATTLE_DECISION_READY_MS;
+    render();
+
+    battleState.decisionReadyTimerId = window.setTimeout(() => {
+      battleState.decisionReadyTimerId = null;
+      if (state.screen !== "battle" || state.battle !== battleState) {
+        return;
+      }
+      battleState.decisionReadyUntil = 0;
+      render();
+    }, BATTLE_DECISION_READY_MS + 20);
+  }, durationMs);
 }
 
 function getBattleEffectDuration(effect) {
@@ -1648,7 +1720,13 @@ function deployBattle() {
     selectedActorId: aliveSquad[0].id,
     nodeOperationId: selectedOperation ? selectedOperation.id : null,
     lastResolution: null,
+    lastActionType: "",
+    lastActionUntil: 0,
     pendingFinish: false,
+    decisionLockUntil: 0,
+    decisionReadyUntil: 0,
+    decisionUnlockTimerId: null,
+    decisionReadyTimerId: null,
     lastBossThreatCue: "",
     fx: createBattleFxState(),
   };
@@ -2224,7 +2302,7 @@ function performAction(actionType) {
   if (!state.run || !state.battle) {
     return;
   }
-  if (state.battle.pendingFinish) {
+  if (state.battle.pendingFinish || isBattleDecisionLocked()) {
     return;
   }
 
@@ -2239,6 +2317,7 @@ function performAction(actionType) {
   const actionLabel = getActionLabel(actionType, actor);
   const enemyHpBeforeAction = state.battle.enemy.hp;
   const squadHpBeforeEnemyTurn = getTotalSquadHp();
+  let actionExecuted = false;
 
   if (actionType === "attack") {
     addBattleArenaEffect("ally-drive");
@@ -2247,6 +2326,7 @@ function performAction(actionType) {
     const damage = calcPlayerDamage(actor, base);
     applyDamageToEnemy(damage, actor.name);
     gainEnergy(actor, 1);
+    actionExecuted = true;
   }
 
   if (actionType === "defend") {
@@ -2266,6 +2346,7 @@ function performAction(actionType) {
       });
       addLog("壁垒网格为友军提供 +1 护盾。");
     }
+    actionExecuted = true;
   }
 
   if (actionType === "skill") {
@@ -2278,6 +2359,7 @@ function performAction(actionType) {
     addBattleArenaEffect("ally-drive");
     actor.energy -= cost;
     executeSkill(actor);
+    actionExecuted = true;
   }
 
   if (actionType === "burst") {
@@ -2294,8 +2376,14 @@ function performAction(actionType) {
     const damage = calcPlayerDamage(actor, base);
     applyDamageToEnemy(damage, actor.name);
     addLog(`${actor.name}施放了同步爆发。`);
+    actionExecuted = true;
   }
 
+  if (!actionExecuted) {
+    return;
+  }
+
+  markBattleActionFeedback(actionType);
   const playerDamage = Math.max(0, enemyHpBeforeAction - state.battle.enemy.hp);
 
   if (state.battle.enemy.hp <= 0) {
@@ -2346,6 +2434,7 @@ function performAction(actionType) {
 
   state.battle.turn += 1;
   addBattleArenaEffect("turn-shift");
+  lockBattleDecisionWindow();
   render();
 }
 
@@ -2612,11 +2701,13 @@ function renderAllyBattlePuppet(agent, isSelected) {
   const hpPct = clamp(Math.round((agent.hp / Math.max(1, agent.hpMax)) * 100), 0, 100);
   const roleLabel = getRoleLabel(agent.role);
   const selectedClass = isSelected ? "selected" : "";
+  const selectedTag = isSelected ? '<span class="battle-selected-tag">操控中</span>' : "";
   const defeatedClass = agent.hp <= 0 ? "defeated" : "";
   const fxClass = getBattleUnitFxClass("ally", agent.id);
 
   return `
     <div class="battle-puppet ally-puppet role-${agent.role.toLowerCase()} ${selectedClass} ${defeatedClass} ${fxClass}" style="--unit-accent:${roleVisual.color}; --unit-soft:${roleVisual.soft};">
+      ${selectedTag}
       <div class="battle-puppet-ring"></div>
       <span class="battle-fx-flare" aria-hidden="true"></span>
       <svg class="battle-puppet-svg" viewBox="0 0 120 142" aria-hidden="true">
@@ -2633,7 +2724,7 @@ function renderAllyBattlePuppet(agent, isSelected) {
       </svg>
       ${renderBattleFloatingTexts("ally", agent.id)}
       ${renderBattleEffectTags("ally", agent.id)}
-      <div class="battle-puppet-meta">
+      <div class="battle-puppet-meta ${selectedClass}">
         <strong>${agent.name}</strong>
         <small class="battle-puppet-role">${roleLabel}</small>
         <small class="battle-puppet-vitals">HP ${agent.hp}/${agent.hpMax}</small>
@@ -3171,10 +3262,24 @@ function renderBattle() {
     ? getNodeOperationById(state.battle.nodeOperationId)
     : null;
 
-  const actionLocked = Boolean(state.battle.pendingFinish);
-  const skillCost = actor ? getSkillCost(actor) : 99;
+  const now = Date.now();
+  const decisionLocked = isBattleDecisionLocked(state.battle, now);
+  const decisionReady = Boolean(state.battle.decisionReadyUntil && state.battle.decisionReadyUntil > now);
+  const actionLocked = Boolean(state.battle.pendingFinish || decisionLocked);
+  const actionFlowClass = decisionLocked ? "is-resolving" : decisionReady ? "is-ready" : "";
+  const skillCost = actor ? getSkillCost(actor) : 0;
   const skillDisabled = actionLocked || !actor || actor.energy < skillCost;
   const burstDisabled = actionLocked || !actor || actor.energy < 3;
+  const skillActionLabel = actor ? `${actor.skill.title}（-${skillCost} 能量）` : "技能";
+  const isRecentAction = (type) =>
+    Boolean(state.battle.lastActionType === type && state.battle.lastActionUntil > now);
+  const flowHint = state.battle.pendingFinish
+    ? "战斗结算中..."
+    : decisionLocked
+      ? "链路同步中..."
+      : decisionReady
+        ? "结算完成，可继续决策。"
+        : "";
   const intentTarget = getLikelyIntentTarget(enemy.intent.id);
   const intentForecast = getIntentForecast(enemy);
   const intentThreatKey = enemy.intent.threat || "medium";
@@ -3263,6 +3368,9 @@ function renderBattle() {
             const selected = state.battle.selectedActorId === agent.id;
             const statusTags = formatAgentStatus(agent);
             const roleVisual = getRoleVisual(agent.role);
+            const selectedControlChip = selected
+              ? '<span class="chip actor-selected-chip">当前操控</span>'
+              : "";
 
             return `
               <article class="card unit-card agent-card role-${agent.role.toLowerCase()} ${selected ? "selected" : ""}" style="--role-accent:${roleVisual.color};">
@@ -3284,9 +3392,10 @@ function renderBattle() {
                 ${statusTags.length > 0 ? `<div class="chip-row">${statusTags
                   .map((tag) => `<span class="chip">${tag}</span>`)
                   .join("")}</div>` : '<p class="muted" style="margin-top:8px;">当前无状态效果。</p>'}
+                ${selectedControlChip ? `<div class="chip-row" style="margin-top:8px;">${selectedControlChip}</div>` : ""}
                 <p class="muted" style="margin-top:8px;">${agent.skill.title}: ${agent.skill.desc}</p>
                 <div class="row" style="margin-top:10px;">
-                  <button class="btn" data-action="select-actor" data-agent-id="${agent.id}" ${actionLocked ? "disabled" : ""}>操控</button>
+                  <button class="btn actor-select-btn ${selected ? "is-selected" : ""}" data-action="select-actor" data-agent-id="${agent.id}" ${actionLocked ? "disabled" : ""}>${selected ? "操控中" : "切换操控"}</button>
                 </div>
               </article>
             `;
@@ -3345,17 +3454,15 @@ function renderBattle() {
           : ""
       }
 
-      <div class="actions">
-        <button class="btn primary action-btn attack" data-action="do-attack" ${actionLocked ? "disabled" : ""}>攻击（+1 能量）</button>
-        <button class="btn action-btn guard" data-action="do-defend" ${actionLocked ? "disabled" : ""}>防御（+1 能量）</button>
-        <button class="btn action-btn skill" data-action="do-skill" ${skillDisabled ? "disabled" : ""}>${
-          actor ? actor.skill.title : "技能"
-        }（-${skillCost} 能量）</button>
-        <button class="btn action-btn burst" data-action="do-burst" ${burstDisabled ? "disabled" : ""}>同步爆发（-3 能量）</button>
+      <div class="actions ${actionFlowClass}">
+        <button class="btn primary action-btn attack ${isRecentAction("attack") ? "recent" : ""}" data-action="do-attack" ${actionLocked ? "disabled" : ""}>攻击（+1 能量）</button>
+        <button class="btn action-btn guard ${isRecentAction("defend") ? "recent" : ""}" data-action="do-defend" ${actionLocked ? "disabled" : ""}>防御（+1 能量）</button>
+        <button class="btn action-btn skill ${isRecentAction("skill") ? "recent" : ""}" data-action="do-skill" ${skillDisabled ? "disabled" : ""}>${skillActionLabel}</button>
+        <button class="btn action-btn burst ${isRecentAction("burst") ? "recent" : ""}" data-action="do-burst" ${burstDisabled ? "disabled" : ""}>同步爆发（-3 能量）</button>
       </div>
 
-      <p style="margin-top:12px;">当前操控：<strong>${actor ? actor.name : "无"}</strong></p>
-      ${actionLocked ? '<p class="muted">战斗结算中...</p>' : ""}
+      <p class="battle-controller-readout">当前操控：<strong>${actor ? actor.name : "无"}</strong></p>
+      ${flowHint ? `<p class="battle-flow-hint ${actionFlowClass}">${flowHint}</p>` : ""}
       <h3 style="margin-top:14px;">指令栈</h3>
       ${renderDirectiveList()}
     </section>
@@ -3527,8 +3634,12 @@ document.addEventListener("click", (event) => {
   }
   if (action === "select-actor") {
     if (state.battle) {
-      state.battle.selectedActorId = button.dataset.agentId;
-      resetBattleFx();
+      const nextActorId = button.dataset.agentId;
+      if (!nextActorId || state.battle.selectedActorId === nextActorId) {
+        return;
+      }
+      state.battle.selectedActorId = nextActorId;
+      addBattleUnitEffect("ally", nextActorId, "status");
       render();
     }
   }
