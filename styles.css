@@ -79,12 +79,55 @@ body::after {
 }
 
 .run-info {
-  font-size: 0.88rem;
-  color: var(--muted);
-  padding: 4px 10px;
-  border-radius: 999px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: #cce4eb;
+  padding: 6px 8px;
+  border-radius: 12px;
   border: 1px solid #305364;
-  background: rgba(15, 36, 46, 0.82);
+  background: rgba(13, 31, 41, 0.84);
+}
+
+.run-info-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #3d6273;
+  background: rgba(14, 35, 46, 0.86);
+  color: #cce4eb;
+  white-space: nowrap;
+}
+
+.run-info-chip.run-info-idle {
+  border-color: #4e7485;
+  color: #d9ecf2;
+}
+
+.run-info-chip.run-info-phase {
+  border-color: #5a96af;
+  background: rgba(16, 44, 57, 0.9);
+  color: #daf3fb;
+}
+
+.run-info-chip.run-info-stage {
+  border-color: #537b8c;
+}
+
+.run-info-chip.run-info-ready {
+  border-color: #5aa58c;
+  background: rgba(17, 47, 40, 0.88);
+  color: #cef5e5;
+}
+
+.run-info-chip.run-info-pending {
+  border-color: #927260;
+  background: rgba(50, 32, 24, 0.86);
+  color: #ffd8bf;
 }
 
 .screen-root,
@@ -632,6 +675,12 @@ ul {
   letter-spacing: 0.02em;
 }
 
+.stage-node em {
+  font-style: normal;
+  font-size: 0.64rem;
+  color: #88adb6;
+}
+
 .stage-node.upcoming {
   opacity: 0.75;
 }
@@ -658,6 +707,32 @@ ul {
 
 .stage-node.stage-boss strong {
   color: #ffd3c7;
+}
+
+.node-brief-grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.node-brief-item {
+  border: 1px solid #365d6f;
+  border-radius: 10px;
+  padding: 7px 9px;
+  background: rgba(11, 27, 35, 0.84);
+  display: grid;
+  gap: 4px;
+}
+
+.node-brief-item small {
+  font-size: 0.66rem;
+  color: #95bbc4;
+}
+
+.node-brief-item strong {
+  font-size: 0.84rem;
+  color: #e1f5fa;
 }
 
 .boss-dossier .row {
@@ -797,8 +872,89 @@ ul {
   background: rgba(12, 27, 35, 0.86);
 }
 
+.operation-overview {
+  margin-bottom: 10px;
+  border: 1px solid #3f6778;
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: rgba(12, 29, 39, 0.84);
+}
+
+.operation-overview h4 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.operation-overview p {
+  margin: 6px 0 0;
+}
+
+.operation-overview.selected {
+  border-color: #4e9880;
+  background:
+    radial-gradient(circle at 86% 12%, rgba(104, 230, 190, 0.14), transparent 42%),
+    rgba(14, 37, 36, 0.88);
+}
+
+.operation-overview.pending {
+  border-color: #886a58;
+  background:
+    radial-gradient(circle at 86% 12%, rgba(255, 176, 130, 0.12), transparent 42%),
+    rgba(38, 24, 20, 0.84);
+}
+
+.operation-chip-selected {
+  border-color: #5aa58c;
+  background: rgba(18, 47, 40, 0.9);
+  color: #c8f4e2;
+}
+
+.operation-chip-ready {
+  border-color: #4f9d88;
+  background: rgba(15, 45, 38, 0.86);
+  color: #cbf2e5;
+}
+
+.operation-chip-pending {
+  border-color: #9b705f;
+  background: rgba(49, 30, 22, 0.9);
+  color: #ffd6bf;
+}
+
 .protocol-card {
   background: linear-gradient(165deg, rgba(14, 28, 36, 0.98), rgba(17, 31, 40, 0.95));
+}
+
+.protocol-meta {
+  margin-bottom: 6px;
+}
+
+.protocol-index {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: #9ec3cc;
+}
+
+.protocol-state {
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid #4a6e80;
+  background: rgba(12, 28, 37, 0.84);
+  color: #c5e2e9;
+}
+
+.protocol-state.selected {
+  border-color: #5ca58f;
+  background: rgba(17, 48, 40, 0.9);
+  color: #cef6e7;
+}
+
+.protocol-state.switchable {
+  border-color: #7d8b65;
+  background: rgba(35, 38, 23, 0.84);
+  color: #e7efc2;
 }
 
 .protocol-head {
@@ -3283,6 +3439,17 @@ ul {
   margin-bottom: 0;
 }
 
+.node-transition-panel {
+  border-color: #486f82;
+  background:
+    radial-gradient(circle at 14% 10%, rgba(103, 189, 242, 0.14), transparent 40%),
+    linear-gradient(165deg, rgba(13, 31, 41, 0.96), rgba(12, 26, 34, 0.94));
+}
+
+.node-transition-panel p {
+  margin-bottom: 8px;
+}
+
 .reward-bridge {
   margin-bottom: 10px;
   border-color: #446f7f;
@@ -3615,6 +3782,16 @@ ul {
   .topbar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .run-info {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .run-info-chip {
+    min-height: 20px;
+    font-size: 0.74rem;
   }
 
   .screen-root {

@@ -304,6 +304,7 @@ const state = {
   battle: null,
   pendingRewards: [],
   lastBattleResult: null,
+  lastTransition: null,
   runResult: null,
   log: ["系统待机中，等待协议启动。"],
 };
@@ -679,6 +680,22 @@ function getThreatLabel(threat) {
 
 function getThreatDirective(threat) {
   return THREAT_DIRECTIVES[threat] || THREAT_DIRECTIVES.medium;
+}
+
+function getRunPhaseLabel(screen = state.screen) {
+  if (screen === "squad") {
+    return "部署准备";
+  }
+  if (screen === "battle") {
+    return "节点战斗";
+  }
+  if (screen === "reward") {
+    return "奖励择取";
+  }
+  if (screen === "run-end") {
+    return "行动结算";
+  }
+  return "待机";
 }
 
 function getRoleVisual(role) {
@@ -1468,6 +1485,7 @@ function startRun() {
   state.battle = null;
   state.pendingRewards = [];
   state.lastBattleResult = null;
+  state.lastTransition = null;
   state.runResult = null;
   state.screen = "squad";
   state.log = [];
@@ -1482,6 +1500,7 @@ function abortRun() {
   state.battle = null;
   state.pendingRewards = [];
   state.lastBattleResult = null;
+  state.lastTransition = null;
   state.runResult = null;
   state.log = ["协议已重置，等待新的行动。"];
   render();
@@ -2534,6 +2553,7 @@ function endRun(result, reason) {
   state.screen = "run-end";
   clearCurrentBattleFx();
   state.battle = null;
+  state.lastTransition = null;
 
   if (reason) {
     addLog(reason);
@@ -2556,25 +2576,38 @@ function onBattleWin(victoryPayload = null) {
   const node = getCurrentNode();
   const battleState = state.battle;
   const recoveredHp = applyPostBattleRecovery();
+  const actionLabel =
+    victoryPayload && victoryPayload.actionLabel
+      ? victoryPayload.actionLabel
+      : battleState.lastResolution
+        ? battleState.lastResolution.actionLabel
+        : "常规行动";
+  const playerDamage =
+    victoryPayload && Number.isFinite(victoryPayload.playerDamage)
+      ? victoryPayload.playerDamage
+      : battleState.lastResolution
+        ? battleState.lastResolution.playerDamage
+        : 0;
+  const actorName = victoryPayload && victoryPayload.actorName ? victoryPayload.actorName : "";
+
   state.lastBattleResult = {
     nodeIndex: state.run.nodeIndex + 1,
     nodeLabel: node ? node.label : `节点 ${state.run.nodeIndex + 1}`,
     enemyName: battleState.enemy.name,
     turn: victoryPayload && victoryPayload.turn ? victoryPayload.turn : battleState.turn,
-    actionLabel:
-      victoryPayload && victoryPayload.actionLabel
-        ? victoryPayload.actionLabel
-        : battleState.lastResolution
-          ? battleState.lastResolution.actionLabel
-          : "常规行动",
-    actorName: victoryPayload && victoryPayload.actorName ? victoryPayload.actorName : "",
-    playerDamage:
-      victoryPayload && Number.isFinite(victoryPayload.playerDamage)
-        ? victoryPayload.playerDamage
-        : battleState.lastResolution
-          ? battleState.lastResolution.playerDamage
-          : 0,
+    actionLabel,
+    actorName,
+    playerDamage,
     recoveredHp,
+  };
+  state.lastTransition = {
+    fromNodeIndex: state.run.nodeIndex + 1,
+    fromNodeLabel: node ? node.label : `节点 ${state.run.nodeIndex + 1}`,
+    enemyName: battleState.enemy.name,
+    actionLabel,
+    recoveredHp,
+    rewardTitle: "",
+    toNodeIndex: Math.min(state.run.maxNode, state.run.nodeIndex + 2),
   };
 
   if (state.run.nodeIndex >= state.run.maxNode - 1) {
@@ -2612,12 +2645,28 @@ function applyReward(rewardId) {
 
   addLog(`已安装指令：${reward.title}。`);
 
+  const previousNodeNum = state.run.nodeIndex + 1;
+  const previousTransition = state.lastTransition;
   state.pendingRewards = [];
   state.lastBattleResult = null;
   state.run.nodeIndex += 1;
+  const nextNodeNum = state.run.nodeIndex + 1;
+  state.lastTransition = {
+    fromNodeIndex: previousTransition ? previousTransition.fromNodeIndex : previousNodeNum,
+    fromNodeLabel: previousTransition ? previousTransition.fromNodeLabel : `节点 ${previousNodeNum}`,
+    enemyName: previousTransition ? previousTransition.enemyName : "上一节点目标",
+    actionLabel: previousTransition ? previousTransition.actionLabel : "常规行动",
+    recoveredHp: previousTransition ? previousTransition.recoveredHp : 0,
+    rewardTitle: reward.title,
+    toNodeIndex: nextNodeNum,
+  };
   ensureNodeOperationPlan(state.run.nodeIndex);
   ensureValidSquad();
   state.screen = "squad";
+  const nextNode = getCurrentNode();
+  if (nextNode) {
+    addLog(`链路推进至第 ${nextNodeNum} 节点：${nextNode.label}。`);
+  }
   render();
 }
 
@@ -2968,10 +3017,12 @@ function renderStageProgress(activeIndex, clearedCount = 0) {
           const isCleared = index < clearedCount;
           const isActive = index === activeIndex;
           const statusClass = isActive ? "active" : isCleared ? "cleared" : "upcoming";
+          const statusLabel = isActive ? "当前" : isCleared ? "已清除" : "待推进";
           return `
             <span class="stage-node stage-${visual.style} ${statusClass}">
               <small>节点 ${index + 1}</small>
               <strong>${visual.short}</strong>
+              <em>${statusLabel}</em>
             </span>
           `;
         })
@@ -3107,22 +3158,54 @@ function renderNodeOperationPanel() {
   const options = operationPlan.optionIds
     .map((operationId) => getNodeOperationById(operationId))
     .filter(Boolean);
+  const selectedOperation = operationPlan.selectedId
+    ? getNodeOperationById(operationPlan.selectedId)
+    : null;
+  const selectedVisual = selectedOperation ? getNodeOperationVisual(selectedOperation.id) : null;
+  const overview = selectedOperation
+    ? `
+      <article class="operation-overview selected protocol-${selectedVisual.style}">
+        <div class="row spread">
+          <h4>当前锁定协议：${selectedOperation.title}</h4>
+          <span class="chip operation-chip-selected">已锁定</span>
+        </div>
+        <p class="muted">收益：${selectedOperation.reward}</p>
+        <p class="muted">代价：${selectedOperation.risk}</p>
+      </article>
+    `
+    : `
+      <article class="operation-overview pending">
+        <div class="row spread">
+          <h4>尚未锁定节点协议</h4>
+          <span class="chip operation-chip-pending">必选</span>
+        </div>
+        <p class="muted">部署前请先选择 1 项协议，再确认风险等级与战斗节奏。</p>
+      </article>
+    `;
 
   return `
     <article class="panel panel-visual" style="margin-bottom:12px;">
       <h3>节点协议（必选）</h3>
       <p class="muted">部署前请选择一个风险/收益修正项。不同协议会改变整场战斗节奏。</p>
+      ${overview}
       <div class="card-grid">
         ${options
-          .map((operation) => {
+          .map((operation, index) => {
             const selected = operationPlan.selectedId === operation.id;
             const visual = getNodeOperationVisual(operation.id);
+            const hasPicked = Boolean(operationPlan.selectedId);
             const riskDots = Array.from({ length: 4 }, (_, index) => {
               const active = index < visual.riskLevel ? "active" : "";
               return `<span class="risk-dot ${active}"></span>`;
             }).join("");
+            const protocolState = selected ? "已锁定" : hasPicked ? "可切换" : "待选择";
+            const switchClass = selected ? "selected" : hasPicked ? "switchable" : "";
             return `
               <article class="card protocol-card protocol-${visual.style} ${selected ? "selected" : ""}">
+                <div class="protocol-meta row spread">
+                  <span class="protocol-index">方案 ${index + 1}</span>
+                  <span class="protocol-state ${switchClass}">${protocolState}</span>
+                </div>
                 <div class="protocol-head">
                   ${renderProtocolGlyph(operation.id)}
                   <div>
@@ -3143,7 +3226,13 @@ function renderNodeOperationPanel() {
                   <div class="risk-dots">${riskDots}</div>
                 </div>
                 <button class="btn ${selected ? "" : "primary"}" data-action="pick-node-operation" data-operation-id="${operation.id}">
-                  ${selected ? "已选择" : "选择"}
+                  ${
+                    selected
+                      ? "已选择"
+                      : hasPicked
+                        ? "切换为此方案"
+                        : "选择此方案"
+                  }
                 </button>
               </article>
             `;
@@ -3156,23 +3245,43 @@ function renderNodeOperationPanel() {
 
 function renderHeader() {
   if (!state.run) {
-    runInfo.textContent = "当前无进行中的行动";
+    runInfo.innerHTML = `
+      <span class="run-info-chip run-info-idle">待机</span>
+      <span class="run-info-chip">当前无进行中的行动</span>
+    `;
     return;
   }
 
   const aliveCount = state.run.roster.filter((agent) => agent.hp > 0).length;
+  const totalAgents = state.run.roster.length;
+  const deployedAliveCount = getAliveAgents(state.run.squadIds).length;
   const nodeNum = clamp(state.run.nodeIndex + 1, 1, state.run.maxNode);
   const node = getCurrentNode();
+  const selectedOperation = getSelectedNodeOperation();
+  const phaseLabel = getRunPhaseLabel();
+  const nextNode = NODE_PLAN[state.run.nodeIndex + 1] || null;
   const stageLabel =
     state.screen === "run-end"
       ? "行动结束"
       : state.screen === "reward"
-        ? "奖励结算"
-        : !node
-          ? "行动结束"
-          : `${getDangerLabel(node.danger)}：${node.label}`;
+        ? nextNode
+          ? `下一节点：${getDangerLabel(nextNode.danger)}·${nextNode.label}`
+          : "终局结算"
+        : node
+          ? `${getDangerLabel(node.danger)}·${node.label}`
+          : "行动结束";
 
-  runInfo.textContent = `节点 ${nodeNum}/${state.run.maxNode} | ${stageLabel} | 存活 ${aliveCount} | 指令 ${Object.keys(state.run.rewardTally).length}`;
+  runInfo.innerHTML = `
+    <span class="run-info-chip run-info-phase">${phaseLabel}</span>
+    <span class="run-info-chip">节点 ${nodeNum}/${state.run.maxNode}</span>
+    <span class="run-info-chip run-info-stage">${stageLabel}</span>
+    <span class="run-info-chip ${selectedOperation ? "run-info-ready" : "run-info-pending"}">
+      ${selectedOperation ? `协议 ${selectedOperation.title}` : "协议待选择"}
+    </span>
+    <span class="run-info-chip">存活 ${aliveCount}/${totalAgents}</span>
+    <span class="run-info-chip">部署 ${deployedAliveCount}/${CONFIG.maxSquadSize}</span>
+    <span class="run-info-chip">指令 ${Object.keys(state.run.rewardTally).length}</span>
+  `;
 }
 
 function renderLog() {
@@ -3226,11 +3335,20 @@ function renderSquad() {
 
   const node = getCurrentNode();
   const aliveCount = state.run.roster.filter((agent) => agent.hp > 0).length;
+  const deployedAliveCount = getAliveAgents(state.run.squadIds).length;
   const deployDisabled =
     state.run.squadIds.length === 0 ||
     aliveCount === 0 ||
     !operationPlan ||
     !operationPlan.selectedId;
+  const selectedOperation =
+    operationPlan && operationPlan.selectedId
+      ? getNodeOperationById(operationPlan.selectedId)
+      : null;
+  const transitionDigest =
+    state.lastTransition && state.lastTransition.toNodeIndex === state.run.nodeIndex + 1
+      ? state.lastTransition
+      : null;
   const threatLabels = node
     ? node.enemies
         .map((enemyId) => {
@@ -3254,9 +3372,54 @@ function renderSquad() {
           ${renderStageBadge(node ? node.danger : null)}
         </div>
         <p class="muted">每次胜利后自动修复：存活特工恢复 +${state.run.mods.postBattleHeal} 生命。</p>
-        <div class="chip-row">${threatLabels}</div>
+        <div class="chip-row">
+          <span class="chip ${selectedOperation ? "operation-chip-selected" : "operation-chip-pending"}">
+            ${selectedOperation ? `协议已锁定：${selectedOperation.title}` : "协议未锁定"}
+          </span>
+          <span class="chip ${deployDisabled ? "operation-chip-pending" : "operation-chip-ready"}">
+            ${deployDisabled ? "部署条件未满足" : "可部署"}
+          </span>
+          ${threatLabels}
+        </div>
+        <div class="node-brief-grid">
+          <article class="node-brief-item">
+            <small>节点压力</small>
+            <strong>${node ? getDangerLabel(node.danger) : "未知"}</strong>
+          </article>
+          <article class="node-brief-item">
+            <small>协议状态</small>
+            <strong>${selectedOperation ? "已选择" : "待选择"}</strong>
+          </article>
+          <article class="node-brief-item">
+            <small>可部署战力</small>
+            <strong>${deployedAliveCount}/${CONFIG.maxSquadSize}</strong>
+          </article>
+        </div>
         ${renderStageProgress(state.run.nodeIndex, state.run.nodeIndex)}
       </article>
+
+      ${
+        transitionDigest
+          ? `
+        <article class="panel panel-visual node-transition-panel" style="margin-bottom:12px;">
+          <div class="row spread">
+            <h3>节点衔接回执</h3>
+            <span class="chip">来自节点 ${transitionDigest.fromNodeIndex} · ${transitionDigest.fromNodeLabel}</span>
+          </div>
+          <p>${transitionDigest.enemyName} 已清除，链路保持稳定并推进到下一节点。</p>
+          <div class="chip-row">
+            <span class="chip">终结动作：${transitionDigest.actionLabel}</span>
+            <span class="chip">战后修复 ${transitionDigest.recoveredHp > 0 ? `+${transitionDigest.recoveredHp}` : "0"}</span>
+            ${
+              transitionDigest.rewardTitle
+                ? `<span class="chip operation-chip-ready">已安装：${transitionDigest.rewardTitle}</span>`
+                : '<span class="chip operation-chip-pending">待安装节点奖励</span>'
+            }
+          </div>
+        </article>
+      `
+          : ""
+      }
 
       ${
         bossTemplate
