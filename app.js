@@ -310,6 +310,7 @@ const state = {
 const screenRoot = document.getElementById("screen-root");
 const runInfo = document.getElementById("run-info");
 const logList = document.getElementById("log-list");
+const ENEMY_STAGE_TARGET_ID = "__enemy__";
 
 const DANGER_LABELS = {
   Skirmish: "遭遇战",
@@ -399,6 +400,63 @@ const ENEMY_VISUALS = {
     color: "#ffd37a",
     soft: "#4e371f",
   },
+};
+
+const AGENT_GLYPHS = {
+  seer: `
+      <ellipse cx="48" cy="48" rx="18" ry="10" fill="none" stroke="#d6fbff" stroke-width="4"/>
+      <circle cx="48" cy="48" r="5" fill="#d6fbff"/>
+      <path d="M32 65 L48 56 L64 65" fill="none" stroke="#d6fbff" stroke-width="4" stroke-linecap="round"/>
+    `,
+  bulwark: `
+      <path d="M48 20 L70 30 L66 56 Q48 76 30 56 L26 30 Z" fill="none" stroke="#dbffe7" stroke-width="4"/>
+      <path d="M48 30 L48 58" stroke="#dbffe7" stroke-width="4" stroke-linecap="round"/>
+      <path d="M38 45 L58 45" stroke="#dbffe7" stroke-width="4" stroke-linecap="round"/>
+    `,
+  ghost: `
+      <path d="M34 64 L64 30" stroke="#ffe5de" stroke-width="5" stroke-linecap="round"/>
+      <path d="M33 34 L63 64" stroke="#ffe5de" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+      <path d="M24 54 L40 70" stroke="#ffe5de" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+    `,
+  loom: `
+      <path d="M30 30 L66 66 M66 30 L30 66" stroke="#efe6ff" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="48" cy="48" r="8" fill="none" stroke="#efe6ff" stroke-width="3"/>
+      <circle cx="48" cy="48" r="2.5" fill="#efe6ff"/>
+    `,
+};
+
+const ENEMY_GLYPHS = {
+  warden: `
+      <rect x="30" y="24" width="36" height="48" rx="6" fill="none" stroke="#ffe8df" stroke-width="4"></rect>
+      <path d="M36 44 H60 M36 54 H60" stroke="#ffe8df" stroke-width="3" stroke-linecap="round"></path>
+    `,
+  hunter: `
+      <path d="M24 66 L46 22 L72 66" fill="none" stroke="#fff2e2" stroke-width="4" stroke-linejoin="round"></path>
+      <circle cx="48" cy="50" r="5" fill="#fff2e2"></circle>
+    `,
+  siren: `
+      <path d="M26 60 Q48 20 70 60" fill="none" stroke="#ffe6f0" stroke-width="4"></path>
+      <path d="M32 66 Q48 40 64 66" fill="none" stroke="#ffe6f0" stroke-width="3"></path>
+      <circle cx="48" cy="36" r="4" fill="#ffe6f0"></circle>
+    `,
+  brute: `
+      <rect x="26" y="34" width="44" height="30" rx="4" fill="none" stroke="#ffe3e3" stroke-width="4"></rect>
+      <path d="M26 46 H18 M70 46 H78" stroke="#ffe3e3" stroke-width="4" stroke-linecap="round"></path>
+    `,
+  prime: `
+      <circle cx="48" cy="48" r="24" fill="none" stroke="#fff1d8" stroke-width="4"></circle>
+      <circle cx="48" cy="48" r="10" fill="none" stroke="#fff1d8" stroke-width="3"></circle>
+      <path d="M48 18 V30 M48 66 V78 M18 48 H30 M66 48 H78" stroke="#fff1d8" stroke-width="3" stroke-linecap="round"></path>
+    `,
+};
+
+const BATTLE_EFFECT_LABELS = {
+  attack: "进攻",
+  hit: "受击",
+  heal: "修复",
+  shield: "护盾",
+  "phase-shift": "相位",
+  defeat: "离线",
 };
 
 const NODE_OPERATION_VISUALS = {
@@ -725,6 +783,190 @@ function getThreatName(enemyId) {
   return template ? template.name : enemyId;
 }
 
+function getBattleSquadRoster() {
+  if (!state.run) {
+    return [];
+  }
+  return state.run.squadIds
+    .map((agentId) => state.run.roster.find((agent) => agent.id === agentId))
+    .filter(Boolean);
+}
+
+function createBattleFxState() {
+  return {
+    allyEffects: {},
+    enemyEffects: [],
+    arenaEffects: [],
+    floatingTexts: [],
+    nextTextId: 1,
+  };
+}
+
+function ensureBattleFx() {
+  if (!state.battle) {
+    return null;
+  }
+
+  if (!state.battle.fx) {
+    state.battle.fx = createBattleFxState();
+  }
+  return state.battle.fx;
+}
+
+function resetBattleFx() {
+  if (!state.battle) {
+    return;
+  }
+  state.battle.fx = createBattleFxState();
+}
+
+function addBattleUnitEffect(side, targetId, effect) {
+  const fx = ensureBattleFx();
+  if (!fx || !effect) {
+    return;
+  }
+
+  if (side === "enemy") {
+    if (!fx.enemyEffects.includes(effect)) {
+      fx.enemyEffects.push(effect);
+    }
+    return;
+  }
+
+  if (side !== "ally" || !targetId) {
+    return;
+  }
+
+  if (!fx.allyEffects[targetId]) {
+    fx.allyEffects[targetId] = [];
+  }
+  if (!fx.allyEffects[targetId].includes(effect)) {
+    fx.allyEffects[targetId].push(effect);
+  }
+}
+
+function addBattleArenaEffect(effect) {
+  const fx = ensureBattleFx();
+  if (!fx || !effect) {
+    return;
+  }
+  if (!fx.arenaEffects.includes(effect)) {
+    fx.arenaEffects.push(effect);
+  }
+}
+
+function addBattleFloatingText(side, targetId, kind, amount, customText = "") {
+  const fx = ensureBattleFx();
+  if (!fx || !targetId) {
+    return;
+  }
+
+  const value = Math.max(0, Math.round(amount || 0));
+  if (value <= 0 && !customText) {
+    return;
+  }
+
+  let text = customText;
+  if (!text) {
+    if (kind === "attack") {
+      text = "进攻";
+    }
+    if (kind === "damage") {
+      text = `-${value}`;
+    }
+    if (kind === "heal") {
+      text = `+${value}`;
+    }
+    if (kind === "shield") {
+      text = `护盾 +${value}`;
+    }
+  }
+
+  fx.floatingTexts.push({
+    id: fx.nextTextId,
+    side,
+    targetId,
+    kind,
+    text,
+  });
+  fx.nextTextId += 1;
+}
+
+function addBattleAttackCue(side, targetId, customText = "进攻") {
+  addBattleUnitEffect(side, targetId, "attack");
+  addBattleFloatingText(side, targetId, "attack", 0, customText);
+}
+
+function getBattleUnitEffects(side, targetId) {
+  if (!state.battle || !state.battle.fx) {
+    return [];
+  }
+  return side === "enemy"
+    ? state.battle.fx.enemyEffects
+    : state.battle.fx.allyEffects[targetId] || [];
+}
+
+function getBattleUnitFxClass(side, targetId) {
+  const fx = getBattleUnitEffects(side, targetId);
+  return fx.map((effect) => `fx-${effect}`).join(" ");
+}
+
+function getBattleArenaFxClass() {
+  if (!state.battle || !state.battle.fx) {
+    return "";
+  }
+  return state.battle.fx.arenaEffects.map((effect) => `fx-arena-${effect}`).join(" ");
+}
+
+function renderBattleFloatingTexts(side, targetId) {
+  if (!state.battle || !state.battle.fx) {
+    return "";
+  }
+
+  const items = state.battle.fx.floatingTexts.filter(
+    (entry) => entry.side === side && entry.targetId === targetId
+  );
+  if (items.length === 0) {
+    return "";
+  }
+
+  return `
+    <div class="floating-text-layer" aria-hidden="true">
+      ${items
+        .map(
+          (entry, index) =>
+            `<span class="floating-text kind-${entry.kind}" style="--float-index:${index};">${entry.text}</span>`
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function getBattleEffectTagText(effect, side) {
+  if (effect === "defeat" && side === "enemy") {
+    return "崩解";
+  }
+  return BATTLE_EFFECT_LABELS[effect] || effect;
+}
+
+function renderBattleEffectTags(side, targetId) {
+  const effects = getBattleUnitEffects(side, targetId);
+  if (effects.length === 0) {
+    return "";
+  }
+
+  return `
+    <div class="battle-fx-tags" aria-hidden="true">
+      ${effects
+        .map(
+          (effect) =>
+            `<span class="battle-fx-tag tag-${effect}">${getBattleEffectTagText(effect, side)}</span>`
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 function getUnavailableRewardIds() {
   if (!state.run) {
     return new Set();
@@ -932,6 +1174,11 @@ function handleBossPhaseShift(enemy) {
     enemy.patternIndex = 0;
     enemy.atk += 1;
     enemy.armor += 4;
+    addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "phase-shift");
+    addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "shield");
+    addBattleArenaEffect("phase-shift");
+    addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "phase", 0, "阶段 2");
+    addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "shield", 4);
     addLog(`${enemy.name}进入第 2 阶段：封锁例程上线（攻击 +1，装甲 +4）。`);
     queueEnemyIntent(enemy);
     return;
@@ -944,6 +1191,11 @@ function handleBossPhaseShift(enemy) {
     enemy.atk += 2;
     enemy.charge += 2;
     enemy.armor += 2;
+    addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "phase-shift");
+    addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "shield");
+    addBattleArenaEffect("phase-shift");
+    addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "phase", 0, "阶段 3");
+    addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "shield", 2);
     addLog(`${enemy.name}进入第 3 阶段：湮灭循环上线（攻击 +2，充能 +2，装甲 +2）。`);
     queueEnemyIntent(enemy);
   }
@@ -1040,8 +1292,17 @@ function deployBattle() {
     selectedActorId: aliveSquad[0].id,
     nodeOperationId: selectedOperation ? selectedOperation.id : null,
     lastResolution: null,
+    pendingFinish: false,
+    fx: createBattleFxState(),
   };
   state.screen = "battle";
+
+  if (enemy.bossState) {
+    addBattleArenaEffect("phase-shift");
+    addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "phase-shift");
+    addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "phase", 0, "主核接入");
+    addLog(`${enemy.name}展开主核压制场，战斗压力提升。`);
+  }
 
   const node = getCurrentNode();
   addLog(`第 ${state.run.nodeIndex + 1} 节点开始：${node.label}（${getDangerLabel(node.danger)}）。`);
@@ -1105,12 +1366,22 @@ function applyDamageToEnemy(rawDamage, sourceLabel) {
     const absorbed = Math.min(state.battle.enemy.armor, damage);
     state.battle.enemy.armor -= absorbed;
     damage -= absorbed;
+    addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "shield");
+    addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "shield", absorbed);
     addLog(`${state.battle.enemy.name}的装甲吸收了 ${absorbed} 点伤害。`);
   }
 
   if (damage > 0) {
     state.battle.enemy.hp = Math.max(0, state.battle.enemy.hp - damage);
+    addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "hit");
+    addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "damage", damage);
+    addBattleArenaEffect("impact");
     handleBossPhaseShift(state.battle.enemy);
+  }
+
+  if (state.battle.enemy.hp <= 0) {
+    addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "defeat");
+    addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "defeat", 0, "崩解");
   }
 
   addLog(`${sourceLabel}对${state.battle.enemy.name}造成了 ${damage} 点伤害。`);
@@ -1119,9 +1390,15 @@ function applyDamageToEnemy(rawDamage, sourceLabel) {
 
 function applyDamageToAgent(agent, rawDamage, options = {}) {
   let damage = Math.max(1, rawDamage);
+  const originalDamage = damage;
 
   if (!options.ignoreGuard && agent.status.guard > 0) {
     damage = Math.max(1, damage - 2);
+    const mitigated = Math.max(0, originalDamage - damage);
+    if (mitigated > 0) {
+      addBattleUnitEffect("ally", agent.id, "shield");
+      addBattleFloatingText("ally", agent.id, "shield", mitigated);
+    }
     addLog(`${agent.name}触发守势，降低了来袭伤害。`);
   }
 
@@ -1129,13 +1406,20 @@ function applyDamageToAgent(agent, rawDamage, options = {}) {
     const absorbed = Math.min(agent.status.barrier, damage);
     agent.status.barrier -= absorbed;
     damage -= absorbed;
+    addBattleUnitEffect("ally", agent.id, "shield");
+    addBattleFloatingText("ally", agent.id, "shield", absorbed);
     addLog(`${agent.name}的护盾吸收了 ${absorbed} 点伤害。`);
   }
 
   if (damage > 0) {
     agent.hp = Math.max(0, agent.hp - damage);
+    addBattleUnitEffect("ally", agent.id, "hit");
+    addBattleFloatingText("ally", agent.id, "damage", damage);
+    addBattleArenaEffect("impact");
     addLog(`${agent.name}受到 ${damage} 点伤害。`);
     if (agent.hp <= 0) {
+      addBattleUnitEffect("ally", agent.id, "defeat");
+      addBattleFloatingText("ally", agent.id, "defeat", 0, "离线");
       addLog(`${agent.name}已离线。`);
     }
   }
@@ -1327,6 +1611,7 @@ function executeEnemyTurn() {
   const intentId = enemy.intent.id;
 
   if (intentId === "strike") {
+    addBattleAttackCue("enemy", ENEMY_STAGE_TARGET_ID, "压制");
     const target = getEnemyTarget("random");
     if (target) {
       const damage = randInt(Math.max(1, enemy.atk - 1), enemy.atk + 1) + enemy.charge;
@@ -1337,6 +1622,7 @@ function executeEnemyTurn() {
   }
 
   if (intentId === "pierce") {
+    addBattleAttackCue("enemy", ENEMY_STAGE_TARGET_ID, "穿刺");
     const target = getEnemyTarget("lowest-hp");
     if (target) {
       const damage = randInt(enemy.atk, enemy.atk + 2) + enemy.charge;
@@ -1347,6 +1633,7 @@ function executeEnemyTurn() {
   }
 
   if (intentId === "sweep") {
+    addBattleAttackCue("enemy", ENEMY_STAGE_TARGET_ID, "横扫");
     const targets = getAliveAgents(state.run.squadIds);
     const damage = randInt(Math.max(1, enemy.atk - 2), enemy.atk);
     targets.forEach((target) => {
@@ -1356,6 +1643,7 @@ function executeEnemyTurn() {
   }
 
   if (intentId === "jam") {
+    addBattleAttackCue("enemy", ENEMY_STAGE_TARGET_ID, "干扰");
     const target = getEnemyTarget("highest-energy");
     if (target) {
       const damage = randInt(Math.max(1, enemy.atk - 2), enemy.atk);
@@ -1367,9 +1655,12 @@ function executeEnemyTurn() {
 
   if (intentId === "fortify") {
     enemy.armor += 3;
+    addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "shield");
+    addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "shield", 3);
     const target = getEnemyTarget("random");
     addLog(`${enemy.name}加固自身，装甲 +3。`);
     if (target) {
+      addBattleAttackCue("enemy", ENEMY_STAGE_TARGET_ID, "反击");
       const damage = randInt(1, Math.max(2, enemy.atk - 1));
       applyDamageToAgent(target, damage);
       addLog(`${enemy.name}对${target.name}造成刮擦伤害。`);
@@ -1379,10 +1670,13 @@ function executeEnemyTurn() {
   if (intentId === "overload") {
     enemy.charge += 3;
     enemy.armor += 1;
+    addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "shield");
+    addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "shield", 1);
     addLog(`${enemy.name}进入过载：下次攻击伤害 +3。`);
   }
 
   if (intentId === "lockdown") {
+    addBattleAttackCue("enemy", ENEMY_STAGE_TARGET_ID, "封锁");
     const targets = getAliveAgents(state.run.squadIds);
     const damage = randInt(Math.max(1, enemy.atk - 3), Math.max(1, enemy.atk - 1));
     targets.forEach((target) => {
@@ -1390,10 +1684,13 @@ function executeEnemyTurn() {
       target.status.jam += 1;
     });
     enemy.armor += 2;
+    addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "shield");
+    addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "shield", 2);
     addLog(`${enemy.name}释放封锁脉冲并强化装甲。`);
   }
 
   if (intentId === "annihilate") {
+    addBattleAttackCue("enemy", ENEMY_STAGE_TARGET_ID, "湮灭");
     const target = getEnemyTarget("highest-hp");
     if (target) {
       const damage = randInt(enemy.atk + 2, enemy.atk + 5) + enemy.charge;
@@ -1426,14 +1723,17 @@ function getMostInjuredAlly() {
 
 function grantBarrierToSquad(amount, exceptId = null) {
   if (!state.run) {
-    return;
+    return [];
   }
 
+  const recipients = [];
   getAliveAgents(state.run.squadIds).forEach((agent) => {
     if (agent.id !== exceptId) {
       agent.status.barrier += amount;
+      recipients.push(agent);
     }
   });
+  return recipients;
 }
 
 function executeSkill(actor) {
@@ -1446,6 +1746,7 @@ function executeSkill(actor) {
   if (actor.id === "seer") {
     const base = randInt(Math.max(1, actor.atk - 1), actor.atk + 1);
     const damage = calcPlayerDamage(actor, base);
+    addBattleAttackCue("ally", actor.id);
     applyDamageToEnemy(damage, actor.name);
     const exposeTurns = 2 + state.run.mods.tacticianExposeTurns;
     enemy.status.exposed = Math.max(enemy.status.exposed, exposeTurns);
@@ -1457,9 +1758,15 @@ function executeSkill(actor) {
     actor.status.guard = Math.max(actor.status.guard, 2);
     actor.status.taunt = Math.max(actor.status.taunt, 2);
     actor.status.barrier += 3;
+    addBattleUnitEffect("ally", actor.id, "shield");
+    addBattleFloatingText("ally", actor.id, "shield", 3);
     addLog(`${actor.name}稳住前线（守势 + 嘲讽 + 护盾）。`);
     if (state.run.mods.vanguardBarrierAura) {
-      grantBarrierToSquad(1, actor.id);
+      const recipients = grantBarrierToSquad(1, actor.id);
+      recipients.forEach((agent) => {
+        addBattleUnitEffect("ally", agent.id, "shield");
+        addBattleFloatingText("ally", agent.id, "shield", 1);
+      });
       addLog("壁垒网格为友军追加 +1 护盾。");
     }
     return;
@@ -1468,6 +1775,7 @@ function executeSkill(actor) {
   if (actor.id === "ghost") {
     const hpRatio = enemy.hp / enemy.hpMax;
     let damage = calcPlayerDamage(actor, randInt(actor.atk + 3, actor.atk + 6));
+    addBattleAttackCue("ally", actor.id);
     if (enemy.status.exposed > 0) {
       damage += 2;
     }
@@ -1492,6 +1800,12 @@ function executeSkill(actor) {
     target.status.jam = 0;
 
     const recovered = target.hp - beforeHp;
+    if (recovered > 0) {
+      addBattleUnitEffect("ally", target.id, "heal");
+      addBattleFloatingText("ally", target.id, "heal", recovered);
+    }
+    addBattleUnitEffect("ally", target.id, "shield");
+    addBattleFloatingText("ally", target.id, "shield", 2);
     addLog(`${actor.name}为${target.name}恢复 ${recovered} 点生命并提供护盾。`);
 
     if (state.run.mods.supportCleanseAll) {
@@ -1523,6 +1837,11 @@ function performAction(actionType) {
   if (!state.run || !state.battle) {
     return;
   }
+  if (state.battle.pendingFinish) {
+    return;
+  }
+
+  resetBattleFx();
 
   const actor = findSelectedActor();
   if (!actor) {
@@ -1535,6 +1854,7 @@ function performAction(actionType) {
   const squadHpBeforeEnemyTurn = getTotalSquadHp();
 
   if (actionType === "attack") {
+    addBattleAttackCue("ally", actor.id);
     const base = randInt(Math.max(1, actor.atk - 1), actor.atk + 1);
     const damage = calcPlayerDamage(actor, base);
     applyDamageToEnemy(damage, actor.name);
@@ -1542,11 +1862,17 @@ function performAction(actionType) {
   }
 
   if (actionType === "defend") {
+    addBattleUnitEffect("ally", actor.id, "shield");
+    addBattleFloatingText("ally", actor.id, "shield", 0, "守势");
     actor.status.guard = Math.max(actor.status.guard, 1);
     gainEnergy(actor, 1);
     addLog(`${actor.name}进入防御姿态。`);
     if (actor.role === "Vanguard" && state.run.mods.vanguardBarrierAura) {
-      grantBarrierToSquad(1, actor.id);
+      const recipients = grantBarrierToSquad(1, actor.id);
+      recipients.forEach((agent) => {
+        addBattleUnitEffect("ally", agent.id, "shield");
+        addBattleFloatingText("ally", agent.id, "shield", 1);
+      });
       addLog("壁垒网格为友军提供 +1 护盾。");
     }
   }
@@ -1559,6 +1885,11 @@ function performAction(actionType) {
       return;
     }
     actor.energy -= cost;
+    if (actor.id === "loom") {
+      addBattleUnitEffect("ally", actor.id, "heal");
+    } else if (actor.id === "bulwark") {
+      addBattleUnitEffect("ally", actor.id, "shield");
+    }
     executeSkill(actor);
   }
 
@@ -1570,6 +1901,7 @@ function performAction(actionType) {
       return;
     }
     actor.energy -= cost;
+    addBattleAttackCue("ally", actor.id, "爆发");
     const base = randInt(actor.atk + 4, actor.atk + 8);
     const damage = calcPlayerDamage(actor, base);
     applyDamageToEnemy(damage, actor.name);
@@ -1589,7 +1921,16 @@ function performAction(actionType) {
       intentThreat: "low",
     };
     addLog(`${state.battle.enemy.name}已崩解。`);
-    onBattleWin();
+    state.battle.pendingFinish = true;
+    render();
+    window.setTimeout(() => {
+      if (state.screen !== "battle" || !state.battle) {
+        return;
+      }
+      if (state.battle.enemy.hp <= 0) {
+        onBattleWin();
+      }
+    }, 520);
     return;
   }
 
@@ -1779,29 +2120,7 @@ function renderEnergyCells(current, max = CONFIG.energyCap) {
 
 function renderAgentPortrait(agent) {
   const visual = getRoleVisual(agent.role);
-  const glyphs = {
-    seer: `
-      <ellipse cx="48" cy="48" rx="18" ry="10" fill="none" stroke="#d6fbff" stroke-width="4"/>
-      <circle cx="48" cy="48" r="5" fill="#d6fbff"/>
-      <path d="M32 65 L48 56 L64 65" fill="none" stroke="#d6fbff" stroke-width="4" stroke-linecap="round"/>
-    `,
-    bulwark: `
-      <path d="M48 20 L70 30 L66 56 Q48 76 30 56 L26 30 Z" fill="none" stroke="#dbffe7" stroke-width="4"/>
-      <path d="M48 30 L48 58" stroke="#dbffe7" stroke-width="4" stroke-linecap="round"/>
-      <path d="M38 45 L58 45" stroke="#dbffe7" stroke-width="4" stroke-linecap="round"/>
-    `,
-    ghost: `
-      <path d="M34 64 L64 30" stroke="#ffe5de" stroke-width="5" stroke-linecap="round"/>
-      <path d="M33 34 L63 64" stroke="#ffe5de" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
-      <path d="M24 54 L40 70" stroke="#ffe5de" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
-    `,
-    loom: `
-      <path d="M30 30 L66 66 M66 30 L30 66" stroke="#efe6ff" stroke-width="4" stroke-linecap="round"/>
-      <circle cx="48" cy="48" r="8" fill="none" stroke="#efe6ff" stroke-width="3"/>
-      <circle cx="48" cy="48" r="2.5" fill="#efe6ff"/>
-    `,
-  };
-  const glyph = glyphs[agent.id] || '<circle cx="48" cy="48" r="12" fill="#eaf8ff"/>';
+  const glyph = AGENT_GLYPHS[agent.id] || '<circle cx="48" cy="48" r="12" fill="#eaf8ff"/>';
   const offlineClass = agent.hp <= 0 ? "offline" : "";
 
   return `
@@ -1819,31 +2138,7 @@ function renderAgentPortrait(agent) {
 
 function renderEnemyPortrait(enemy) {
   const visual = getEnemyVisual(enemy.id);
-  const glyphs = {
-    warden: `
-      <rect x="30" y="24" width="36" height="48" rx="6" fill="none" stroke="#ffe8df" stroke-width="4"></rect>
-      <path d="M36 44 H60 M36 54 H60" stroke="#ffe8df" stroke-width="3" stroke-linecap="round"></path>
-    `,
-    hunter: `
-      <path d="M24 66 L46 22 L72 66" fill="none" stroke="#fff2e2" stroke-width="4" stroke-linejoin="round"></path>
-      <circle cx="48" cy="50" r="5" fill="#fff2e2"></circle>
-    `,
-    siren: `
-      <path d="M26 60 Q48 20 70 60" fill="none" stroke="#ffe6f0" stroke-width="4"></path>
-      <path d="M32 66 Q48 40 64 66" fill="none" stroke="#ffe6f0" stroke-width="3"></path>
-      <circle cx="48" cy="36" r="4" fill="#ffe6f0"></circle>
-    `,
-    brute: `
-      <rect x="26" y="34" width="44" height="30" rx="4" fill="none" stroke="#ffe3e3" stroke-width="4"></rect>
-      <path d="M26 46 H18 M70 46 H78" stroke="#ffe3e3" stroke-width="4" stroke-linecap="round"></path>
-    `,
-    prime: `
-      <circle cx="48" cy="48" r="24" fill="none" stroke="#fff1d8" stroke-width="4"></circle>
-      <circle cx="48" cy="48" r="10" fill="none" stroke="#fff1d8" stroke-width="3"></circle>
-      <path d="M48 18 V30 M48 66 V78 M18 48 H30 M66 48 H78" stroke="#fff1d8" stroke-width="3" stroke-linecap="round"></path>
-    `,
-  };
-  const glyph = glyphs[enemy.id] || '<circle cx="48" cy="48" r="12" fill="#f4e2dd"/>';
+  const glyph = ENEMY_GLYPHS[enemy.id] || '<circle cx="48" cy="48" r="12" fill="#f4e2dd"/>';
   return `
     <div class="portrait-shell enemy" style="--portrait-main:${visual.color}; --portrait-soft:${visual.soft};">
       <svg class="portrait-svg" viewBox="0 0 96 96" aria-hidden="true">
@@ -1914,6 +2209,112 @@ function renderIntentSequenceTrack(enemy, count = 4) {
         })
         .join("")}
     </div>
+  `;
+}
+
+function renderAllyBattlePuppet(agent, isSelected) {
+  const roleVisual = getRoleVisual(agent.role);
+  const glyph = AGENT_GLYPHS[agent.id] || '<circle cx="48" cy="48" r="12" fill="#eaf8ff"/>';
+  const hpPct = clamp(Math.round((agent.hp / Math.max(1, agent.hpMax)) * 100), 0, 100);
+  const selectedClass = isSelected ? "selected" : "";
+  const defeatedClass = agent.hp <= 0 ? "defeated" : "";
+  const fxClass = getBattleUnitFxClass("ally", agent.id);
+
+  return `
+    <div class="battle-puppet ally-puppet role-${agent.role.toLowerCase()} ${selectedClass} ${defeatedClass} ${fxClass}" style="--unit-accent:${roleVisual.color}; --unit-soft:${roleVisual.soft};">
+      <div class="battle-puppet-ring"></div>
+      <span class="battle-fx-flare" aria-hidden="true"></span>
+      <svg class="battle-puppet-svg" viewBox="0 0 120 142" aria-hidden="true">
+        <ellipse class="battle-shadow" cx="60" cy="126" rx="33" ry="10"></ellipse>
+        <circle class="battle-head" cx="60" cy="46" r="22"></circle>
+        <rect class="battle-core" x="43" y="68" width="34" height="42" rx="13"></rect>
+        <rect class="battle-limb" x="32" y="76" width="12" height="34" rx="6"></rect>
+        <rect class="battle-limb" x="76" y="76" width="12" height="34" rx="6"></rect>
+        <rect class="battle-limb" x="48" y="108" width="10" height="22" rx="5"></rect>
+        <rect class="battle-limb" x="62" y="108" width="10" height="22" rx="5"></rect>
+        <g class="battle-glyph" transform="translate(12 6)">
+          ${glyph}
+        </g>
+      </svg>
+      ${renderBattleFloatingTexts("ally", agent.id)}
+      ${renderBattleEffectTags("ally", agent.id)}
+      <div class="battle-puppet-meta">
+        <strong>${agent.name}</strong>
+        <small>HP ${agent.hp}/${agent.hpMax}</small>
+        <span class="battle-mini-hp"><span style="width:${hpPct}%"></span></span>
+      </div>
+    </div>
+  `;
+}
+
+function renderEnemyBattlePuppet(enemy) {
+  const visual = getEnemyVisual(enemy.id);
+  const glyph = ENEMY_GLYPHS[enemy.id] || '<circle cx="48" cy="48" r="12" fill="#f4e2dd"/>';
+  const hpPct = clamp(Math.round((enemy.hp / Math.max(1, enemy.hpMax)) * 100), 0, 100);
+  const bossClass = enemy.bossState ? "boss" : "";
+  const phaseClass = enemy.bossState ? `phase-${enemy.bossState.phase}` : "";
+  const defeatedClass = enemy.hp <= 0 ? "defeated" : "";
+  const fxClass = getBattleUnitFxClass("enemy", ENEMY_STAGE_TARGET_ID);
+  const phaseBadge = enemy.bossState
+    ? `<span class="battle-boss-tag">阶段 ${enemy.bossState.phase}</span>`
+    : "";
+  const coreBadge = enemy.bossState ? '<span class="battle-boss-core">主核</span>' : "";
+  const bossAura = enemy.bossState ? '<span class="battle-boss-aura" aria-hidden="true"></span>' : "";
+
+  return `
+    <div class="battle-puppet enemy-puppet ${bossClass} ${phaseClass} ${defeatedClass} ${fxClass}" style="--unit-accent:${visual.color}; --unit-soft:${visual.soft};">
+      ${bossAura}
+      <div class="battle-puppet-ring"></div>
+      <span class="battle-fx-flare" aria-hidden="true"></span>
+      <svg class="battle-puppet-svg enemy" viewBox="0 0 168 176" aria-hidden="true">
+        <ellipse class="battle-shadow" cx="84" cy="154" rx="46" ry="12"></ellipse>
+        <path class="battle-shell" d="M84 22 L128 50 L120 118 Q84 146 48 118 L40 50 Z"></path>
+        <circle class="battle-head enemy" cx="84" cy="72" r="34"></circle>
+        <g class="battle-glyph enemy" transform="translate(36 24)">
+          ${glyph}
+        </g>
+      </svg>
+      ${renderBattleFloatingTexts("enemy", ENEMY_STAGE_TARGET_ID)}
+      ${renderBattleEffectTags("enemy", ENEMY_STAGE_TARGET_ID)}
+      ${phaseBadge}
+      ${coreBadge}
+      <div class="battle-puppet-meta enemy">
+        <strong>${enemy.name}</strong>
+        <small>HP ${enemy.hp}/${enemy.hpMax}</small>
+        <span class="battle-mini-hp enemy"><span style="width:${hpPct}%"></span></span>
+      </div>
+    </div>
+  `;
+}
+
+function renderBattleStage(squad, enemy, selectedActorId, intentThreat = "medium") {
+  const arenaFxClass = getBattleArenaFxClass();
+  const bossClass = enemy.bossState ? "boss-encounter" : "";
+  const phaseClass = enemy.bossState ? `boss-phase-${enemy.bossState.phase}` : "";
+  const centerLabel = enemy.bossState ? "BOSS" : "VS";
+  const threatLabel = getThreatLabel(intentThreat || "medium");
+  const threatClass = `battle-threat-${intentThreat || "medium"}`;
+  const enemyLaneLabel = enemy.bossState ? "主核压制" : "敌方链路";
+
+  return `
+    <article class="battle-stage panel panel-visual ${arenaFxClass} ${bossClass} ${phaseClass}">
+      <div class="battle-stage-head" aria-hidden="true">
+        <span class="battle-lane-tag allies">友军链路 · ${squad.length}</span>
+        <span class="battle-lane-tag enemy">${enemyLaneLabel}</span>
+      </div>
+      <div class="battle-stage-grid">
+        <div class="battle-lane allies">
+          ${squad
+            .map((agent) => renderAllyBattlePuppet(agent, selectedActorId === agent.id))
+            .join("")}
+        </div>
+        <div class="battle-stage-center" aria-hidden="true">
+          <strong>${centerLabel}</strong>
+          <small class="${threatClass}">威胁 ${threatLabel}</small>
+        </div>
+        <div class="battle-lane enemy">${renderEnemyBattlePuppet(enemy)}</div>
+      </div>
+    </article>
   `;
 }
 
@@ -2330,15 +2731,17 @@ function renderBattle() {
 
   const node = getCurrentNode();
   const squad = getAliveAgents(state.run.squadIds);
+  const stagedSquad = getBattleSquadRoster();
   const actor = findSelectedActor();
   const enemy = state.battle.enemy;
   const activeNodeOperation = state.battle.nodeOperationId
     ? getNodeOperationById(state.battle.nodeOperationId)
     : null;
 
+  const actionLocked = Boolean(state.battle.pendingFinish);
   const skillCost = actor ? getSkillCost(actor) : 99;
-  const skillDisabled = !actor || actor.energy < skillCost;
-  const burstDisabled = !actor || actor.energy < 3;
+  const skillDisabled = actionLocked || !actor || actor.energy < skillCost;
+  const burstDisabled = actionLocked || !actor || actor.energy < 3;
   const intentTarget = getLikelyIntentTarget(enemy.intent.id);
   const intentForecast = getIntentForecast(enemy);
   const intentThreatClass = `intent-${enemy.intent.threat || "medium"}`;
@@ -2401,6 +2804,7 @@ function renderBattle() {
       </article>
 
       ${renderBossBattleReadout(enemy)}
+      ${renderBattleStage(stagedSquad, enemy, state.battle.selectedActorId, enemy.intent.threat)}
 
       <div class="card-grid battle-grid" style="margin-bottom:10px;">
         ${squad
@@ -2431,14 +2835,14 @@ function renderBattle() {
                   .join("")}</div>` : '<p class="muted" style="margin-top:8px;">当前无状态效果。</p>'}
                 <p class="muted" style="margin-top:8px;">${agent.skill.title}: ${agent.skill.desc}</p>
                 <div class="row" style="margin-top:10px;">
-                  <button class="btn" data-action="select-actor" data-agent-id="${agent.id}">操控</button>
+                  <button class="btn" data-action="select-actor" data-agent-id="${agent.id}" ${actionLocked ? "disabled" : ""}>操控</button>
                 </div>
               </article>
             `;
           })
           .join("")}
 
-        <article class="card enemy-card unit-card" style="--enemy-accent:${enemyVisual.color};">
+        <article class="card enemy-card unit-card ${enemy.bossState ? "boss-unit-card" : ""}" style="--enemy-accent:${enemyVisual.color};">
           <div class="unit-head enemy-head">
             ${renderEnemyPortrait(enemy)}
             <div class="unit-head-copy">
@@ -2491,8 +2895,8 @@ function renderBattle() {
       }
 
       <div class="actions">
-        <button class="btn primary" data-action="do-attack">攻击（+1 能量）</button>
-        <button class="btn" data-action="do-defend">防御（+1 能量）</button>
+        <button class="btn primary" data-action="do-attack" ${actionLocked ? "disabled" : ""}>攻击（+1 能量）</button>
+        <button class="btn" data-action="do-defend" ${actionLocked ? "disabled" : ""}>防御（+1 能量）</button>
         <button class="btn" data-action="do-skill" ${skillDisabled ? "disabled" : ""}>${
           actor ? actor.skill.title : "技能"
         }（-${skillCost} 能量）</button>
@@ -2500,6 +2904,7 @@ function renderBattle() {
       </div>
 
       <p style="margin-top:12px;">当前操控：<strong>${actor ? actor.name : "无"}</strong></p>
+      ${actionLocked ? '<p class="muted">战斗结算中...</p>' : ""}
       <h3 style="margin-top:14px;">指令栈</h3>
       ${renderDirectiveList()}
     </section>
@@ -2672,6 +3077,7 @@ document.addEventListener("click", (event) => {
   if (action === "select-actor") {
     if (state.battle) {
       state.battle.selectedActorId = button.dataset.agentId;
+      resetBattleFx();
       render();
     }
   }
