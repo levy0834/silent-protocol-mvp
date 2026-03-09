@@ -2965,6 +2965,27 @@ function renderDirectiveList() {
   `;
 }
 
+function getDirectiveCount() {
+  if (!state.run || !state.run.rewardTally) {
+    return 0;
+  }
+  return Object.keys(state.run.rewardTally).length;
+}
+
+function renderDirectivePanel(title = "指令栈") {
+  const count = getDirectiveCount();
+  const countLabel = count > 0 ? `已装载 ${count} 项` : "尚未装载";
+  return `
+    <article class="panel panel-visual directive-panel">
+      <div class="row spread directive-head">
+        <h3>${title}</h3>
+        <span class="chip directive-count-chip">${countLabel}</span>
+      </div>
+      ${renderDirectiveList()}
+    </article>
+  `;
+}
+
 function renderHpBar(current, max, variant) {
   const pct = clamp(Math.round((current / Math.max(1, max)) * 100), 0, 100);
   return `
@@ -3586,7 +3607,7 @@ function renderNodeOperationPanel() {
     `;
 
   return `
-    <article class="panel panel-visual" style="margin-bottom:12px;">
+    <article class="panel panel-visual screen-stack-panel">
       <h3>节点协议（必选 1 项）</h3>
       <p class="muted">每项协议 = 1 条收益 + 1 条代价。可先比较压力等级，首轮建议优先选择 2-3 格风险。</p>
       ${overview}
@@ -3699,7 +3720,7 @@ function renderLog() {
       const phaseLabel = LOG_PHASE_META[entry.phase] ? LOG_PHASE_META[entry.phase].label : "系统";
 
       return `
-        <li class="log-entry phase-${entry.phase} tone-${entry.tone}">
+        <li class="log-entry phase-${entry.phase} tone-${entry.tone} ${index === 0 ? "is-latest" : ""}">
           <div class="log-entry-head">
             <span class="log-phase-chip">${phaseLabel}</span>
             <span class="log-seq">#${entry.id}</span>
@@ -3827,7 +3848,7 @@ function renderSquad() {
   const screenClass = getScreenSectionClass("squad-screen");
   screenRoot.innerHTML = `
     <section class="${screenClass}">
-      <div class="row spread">
+      <div class="row spread screen-head">
         <h2 class="screen-title">小队编成</h2>
         <small>已选 ${state.run.squadIds.length}/${CONFIG.maxSquadSize}</small>
       </div>
@@ -3856,7 +3877,7 @@ function renderSquad() {
         hintText: loopHintText,
       })}
 
-      <article class="panel panel-visual stage-panel" style="margin-bottom:12px;">
+      <article class="panel panel-visual stage-panel screen-stack-panel">
         <div class="row spread">
           <h3>下一场遭遇：节点 ${state.run.nodeIndex + 1} - ${node ? node.label : "未知"}</h3>
           ${renderStageBadge(node ? node.danger : null)}
@@ -3896,7 +3917,7 @@ function renderSquad() {
       ${
         transitionDigest
           ? `
-        <article class="panel panel-visual node-transition-panel" style="margin-bottom:12px;">
+        <article class="panel panel-visual node-transition-panel screen-stack-panel">
           <div class="row spread">
             <h3>节点衔接回执</h3>
             <span class="chip">来自节点 ${transitionDigest.fromNodeIndex} · ${transitionDigest.fromNodeLabel}</span>
@@ -3924,7 +3945,7 @@ function renderSquad() {
       ${
         bossTemplate
           ? `
-        <article class="panel boss-dossier panel-visual" style="margin-bottom:12px;">
+        <article class="panel boss-dossier panel-visual screen-stack-panel">
           <div class="row">
             ${renderEnemyPortrait({ id: bossTemplate.id })}
             <div>
@@ -3976,7 +3997,7 @@ function renderSquad() {
                 }
                 <p class="muted" style="margin-top:8px;">技能：${agent.skill.title}（消耗 ${skillCost} 能量）</p>
                 <p class="muted">${agent.passive}</p>
-                <label class="row deploy-switch" style="margin-top:10px;">
+                <label class="row deploy-switch">
                   <input type="checkbox" data-agent-toggle="${agent.id}" ${checked} ${dead ? "disabled" : ""} />
                   <span>${dead ? "离线" : "部署到小队"}</span>
                 </label>
@@ -3986,10 +4007,9 @@ function renderSquad() {
           .join("")}
       </div>
 
-      <h3 style="margin-top:14px;">指令栈</h3>
-      ${renderDirectiveList()}
+      ${renderDirectivePanel("指令栈")}
 
-      <div class="row" style="margin-top:12px;">
+      <div class="row screen-action-row">
         <button class="btn primary" data-action="deploy" ${deployDisabled ? "disabled" : ""}>${deployButtonLabel}</button>
         <button class="btn warn" data-action="abort-run">终止行动</button>
       </div>
@@ -4087,7 +4107,7 @@ function renderBattle() {
   const screenClass = getScreenSectionClass("battle-screen");
   screenRoot.innerHTML = `
     <section class="${screenClass}">
-      <div class="row spread">
+      <div class="row spread screen-head">
         <h2 class="screen-title">节点 ${state.run.nodeIndex + 1} - ${node ? node.label : "战斗"}</h2>
         <div class="battle-cycle-readout" aria-live="polite">
           <span class="battle-cycle-chip turn ${turnPulseClass}">回合 ${state.battle.turn}</span>
@@ -4143,7 +4163,7 @@ function renderBattle() {
         intentTarget
       )}
 
-      <div class="card-grid battle-grid" style="margin-bottom:10px;">
+      <div class="card-grid battle-grid">
         ${squad
           .map((agent) => {
             const selected = state.battle.selectedActorId === agent.id;
@@ -4210,7 +4230,7 @@ function renderBattle() {
       ${
         state.battle.lastResolution
           ? `
-        <article class="panel combat-summary" style="margin-bottom:10px;">
+        <article class="panel combat-summary screen-stack-panel-tight">
           <h3>第 ${state.battle.lastResolution.turn} 回合复盘</h3>
           <div class="impact-grid">
             <div>
@@ -4238,7 +4258,7 @@ function renderBattle() {
       ${
         state.battle.pendingFinish
           ? `
-        <article class="panel panel-visual battle-victory-bridge phase-${finishPhase || "collapse"}" style="margin-bottom:10px;">
+        <article class="panel panel-visual battle-victory-bridge phase-${finishPhase || "collapse"} screen-stack-panel-tight">
           <div class="row spread">
             <h3>${battleFinishTitle}</h3>
             <span class="chip battle-finish-chip">${enemy.name}</span>
@@ -4264,8 +4284,7 @@ function renderBattle() {
 
       <p class="battle-controller-readout">当前操控：<strong>${actor ? actor.name : "无"}</strong></p>
       ${flowHint ? `<p class="battle-flow-hint ${actionFlowClass}">${flowHint}</p>` : ""}
-      <h3 style="margin-top:14px;">指令栈</h3>
-      ${renderDirectiveList()}
+      ${renderDirectivePanel("指令栈")}
     </section>
   `;
 }
@@ -4286,7 +4305,7 @@ function renderReward() {
   screenRoot.innerHTML = `
     <section class="${screenClass}">
       <article class="panel panel-visual reward-intro">
-        <div class="row spread">
+        <div class="row spread screen-head">
           <h2 class="screen-title">指令奖励</h2>
           <div class="row">
             <span class="chip">${hasNextNode ? `下一节点 ${nextNodeNum}/${state.run.maxNode}` : "终局结算"}</span>
@@ -4355,10 +4374,7 @@ function renderReward() {
                 .join("")
         }
       </div>
-      <article class="panel panel-visual">
-        <h3>当前指令栈</h3>
-        ${renderDirectiveList()}
-      </article>
+      ${renderDirectivePanel("当前指令栈")}
     </section>
   `;
 }
@@ -4400,7 +4416,7 @@ function renderRunEnd() {
   screenRoot.innerHTML = `
     <section class="${screenClass}">
       <article class="panel panel-visual end-hero ${isWin ? "success" : "failure"}">
-        <div class="row spread">
+        <div class="row spread screen-head">
           <h2 class="screen-title">${title}</h2>
           <span class="chip ${isWin ? "result-success" : "result-failure"}">${isWin ? "任务完成" : "任务中断"}</span>
         </div>
@@ -4426,7 +4442,7 @@ function renderRunEnd() {
         <ul>${directives}</ul>
       </article>
 
-      <div class="row" style="margin-top:4px;">
+      <div class="row end-action-row">
         <button class="btn primary" data-action="start-run">开始新行动</button>
         <button class="btn" data-action="to-title">返回标题</button>
       </div>

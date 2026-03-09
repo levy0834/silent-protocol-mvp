@@ -266,6 +266,18 @@ body::after {
   display: none;
 }
 
+.log-entry.is-latest {
+  border-color: #4b7889;
+  box-shadow:
+    0 0 0 1px rgba(102, 177, 204, 0.24) inset,
+    0 0 18px rgba(82, 164, 196, 0.14);
+  animation: log-entry-latest 420ms ease-out;
+}
+
+.log-entry.is-latest::before {
+  box-shadow: 0 0 14px rgba(104, 196, 224, 0.42);
+}
+
 h2,
 h3,
 p {
@@ -289,6 +301,21 @@ ul {
 
 .screen-title {
   margin-bottom: 12px;
+}
+
+.screen-head {
+  gap: 10px;
+  padding-bottom: 8px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid rgba(73, 110, 126, 0.72);
+}
+
+.screen-head .screen-title {
+  margin-bottom: 0;
+}
+
+.screen-head small {
+  color: #a6c8d1;
 }
 
 .card-grid {
@@ -351,6 +378,22 @@ ul {
 
 .row.spread {
   justify-content: space-between;
+}
+
+.screen-stack-panel {
+  margin-bottom: 12px;
+}
+
+.screen-stack-panel-tight {
+  margin-bottom: 10px;
+}
+
+.screen-action-row {
+  margin-top: 12px;
+}
+
+.end-action-row {
+  margin-top: 4px;
 }
 
 .stat-row {
@@ -487,6 +530,28 @@ ul {
 
 .btn:not(:disabled):active {
   transform: translateY(1px) scale(0.99);
+}
+
+.btn:focus-visible {
+  outline: none;
+  border-color: #76c3d9;
+  box-shadow:
+    0 0 0 1px #76c3d9,
+    0 0 0 3px rgba(129, 201, 226, 0.16);
+}
+
+.btn.primary:focus-visible {
+  border-color: #63d7b9;
+  box-shadow:
+    0 0 0 1px #63d7b9,
+    0 0 0 3px rgba(103, 218, 185, 0.18);
+}
+
+.btn.warn:focus-visible {
+  border-color: #d87d67;
+  box-shadow:
+    0 0 0 1px #d87d67,
+    0 0 0 3px rgba(216, 125, 103, 0.18);
 }
 
 .action-btn {
@@ -677,6 +742,31 @@ ul {
 
 .battle-cycle-chip.pulse {
   animation: battle-cycle-pulse 620ms ease-out;
+}
+
+.directive-panel {
+  border-color: #446b7c;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(101, 187, 231, 0.14), transparent 42%),
+    linear-gradient(165deg, rgba(13, 31, 40, 0.96), rgba(12, 27, 35, 0.94));
+}
+
+.directive-head {
+  margin-bottom: 8px;
+}
+
+.directive-head h3 {
+  margin: 0;
+}
+
+.directive-count-chip {
+  border-color: #547f92;
+  background: rgba(14, 36, 48, 0.9);
+  color: #cbe9f2;
+}
+
+.directive-panel p {
+  margin-bottom: 0;
 }
 
 .title-hero {
@@ -1251,6 +1341,20 @@ ul {
   border-radius: 10px;
   padding: 8px 10px;
   background: rgba(12, 27, 35, 0.86);
+}
+
+.deploy-switch input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #65e6c2;
+  flex-shrink: 0;
+}
+
+.deploy-switch input[type="checkbox"]:focus-visible {
+  outline: 2px solid rgba(122, 206, 232, 0.9);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .operation-overview {
@@ -3630,6 +3734,10 @@ ul {
   height: 52px;
 }
 
+.battle-grid {
+  margin-bottom: 10px;
+}
+
 .battle-grid .agent-card.selected {
   border-color: #74d4e9;
   box-shadow:
@@ -3997,6 +4105,18 @@ ul {
   letter-spacing: 0.02em;
 }
 
+@keyframes log-entry-latest {
+  0% {
+    transform: translateX(-2px);
+    box-shadow:
+      0 0 0 1px rgba(110, 192, 220, 0.34) inset,
+      0 0 22px rgba(102, 191, 224, 0.2);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .battle-puppet-svg,
   .battle-fx-flare,
@@ -4018,7 +4138,8 @@ ul {
   .reward-reveal-card,
   .screen-enter,
   .battle-puppet-ring,
-  .battle-shell {
+  .battle-shell,
+  .log-entry.is-latest {
     animation: none !important;
     transition: none !important;
   }
