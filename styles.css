@@ -692,6 +692,37 @@ ul {
   max-width: 38em;
 }
 
+.title-goal {
+  margin-bottom: 8px;
+  color: #cbeaf3;
+}
+
+.title-quickstart {
+  margin: 0 0 10px;
+  border: 1px solid #45677a;
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: rgba(12, 29, 38, 0.82);
+}
+
+.title-quickstart h3 {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  color: #d9f2f8;
+}
+
+.title-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 5px;
+}
+
+.title-steps li {
+  color: #b9d7df;
+  font-size: 0.78rem;
+}
+
 .title-art {
   border: 1px solid #2d4f5f;
   border-radius: 12px;
@@ -886,6 +917,17 @@ ul {
   margin: 8px 0 0;
 }
 
+.onboarding-brief {
+  border-color: #4a7082;
+  background:
+    radial-gradient(circle at 14% 10%, rgba(110, 198, 242, 0.14), transparent 42%),
+    linear-gradient(165deg, rgba(13, 31, 40, 0.95), rgba(12, 27, 36, 0.92));
+}
+
+.onboarding-brief p {
+  margin-bottom: 8px;
+}
+
 .deploy-checklist {
   margin-top: 8px;
   display: grid;
@@ -928,6 +970,32 @@ ul {
 
 .deploy-check-item.pending strong {
   color: #f7cfb8;
+}
+
+.deploy-check-item.warn {
+  border-color: #9a7056;
+  background: rgba(44, 29, 21, 0.88);
+}
+
+.deploy-check-item.warn strong {
+  color: #ffd8bf;
+}
+
+.squad-next-action {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+}
+
+.squad-next-action-ready {
+  color: #bdeedb;
+}
+
+.squad-next-action-pending {
+  color: #d2e7ef;
+}
+
+.squad-next-action-warn {
+  color: #ffd0bb;
 }
 
 .squad-digest-grid {

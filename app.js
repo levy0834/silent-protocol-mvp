@@ -315,6 +315,9 @@ const state = {
       text: "系统待机中，等待协议启动。",
     },
   ],
+  onboarding: {
+    firstRunGuidancePending: true,
+  },
 };
 
 const screenRoot = document.getElementById("screen-root");
@@ -705,6 +708,13 @@ function getThreatLabel(threat) {
 
 function getThreatDirective(threat) {
   return THREAT_DIRECTIVES[threat] || THREAT_DIRECTIVES.medium;
+}
+
+function getMinimumRecommendedDeployCount(aliveCount) {
+  if (aliveCount <= 1) {
+    return 1;
+  }
+  return Math.min(CONFIG.maxSquadSize, 2);
 }
 
 function getRunPhaseLabel(screen = state.screen) {
@@ -1571,12 +1581,30 @@ function selectNodeOperation(operationId) {
   const operation = getNodeOperationById(operationId);
   if (operation) {
     addLog(`已选择节点协议：${operation.title}。`, { phase: "node", tone: "info" });
+    if (
+      state.run.onboarding &&
+      state.run.onboarding.guidanceActive &&
+      !state.run.onboarding.protocolNextStepHintShown
+    ) {
+      addLog("下一步：确认部署位后点击“部署到节点”进入战斗。", {
+        phase: "squad",
+        tone: "info",
+      });
+      state.run.onboarding.protocolNextStepHintShown = true;
+    }
   }
   render();
 }
 
 function startRun() {
+  const guidanceActive = Boolean(state.onboarding && state.onboarding.firstRunGuidancePending);
   state.run = createRun();
+  state.run.onboarding = {
+    guidanceActive,
+    protocolNextStepHintShown: false,
+    underfilledDeployConfirmed: false,
+    openingBattleHintShown: false,
+  };
   ensureNodeOperationPlan(0);
   clearCurrentBattleFx();
   state.battle = null;
@@ -1588,6 +1616,16 @@ function startRun() {
   state.log = [];
   state.logCursor = 0;
   addLog("行动已开始，请为第 1 节点编成小队。", { phase: "node", tone: "info" });
+  if (guidanceActive) {
+    addLog("核心循环：节点准备 → 节点战斗 → 指令奖励 → 推进下一节点。", {
+      phase: "system",
+      tone: "info",
+    });
+    addLog("当前短期目标：先锁定 1 项节点协议，再确认部署位并进入节点 1。", {
+      phase: "squad",
+      tone: "info",
+    });
+  }
   render();
 }
 
@@ -1627,9 +1665,24 @@ function toggleSquadAgent(agentId, checked) {
         return;
       }
       state.run.squadIds.push(agentId);
+      if (state.run.onboarding && state.run.onboarding.guidanceActive) {
+        addLog(`已加入 ${agent.name}（部署位 ${state.run.squadIds.length}/${CONFIG.maxSquadSize}）。`, {
+          phase: "squad",
+          tone: "info",
+        });
+      }
     }
   } else {
     state.run.squadIds = state.run.squadIds.filter((id) => id !== agentId);
+    if (state.run.onboarding && state.run.onboarding.guidanceActive) {
+      addLog(`已移出 ${agent.name}（部署位 ${state.run.squadIds.length}/${CONFIG.maxSquadSize}）。`, {
+        phase: "squad",
+        tone: "info",
+      });
+    }
+  }
+  if (state.run.onboarding) {
+    state.run.onboarding.underfilledDeployConfirmed = false;
   }
 
   render();
@@ -1840,9 +1893,31 @@ function deployBattle() {
 
   ensureValidSquad();
   const aliveSquad = getAliveAgents(state.run.squadIds);
+  const aliveCount = state.run.roster.filter((agent) => agent.hp > 0).length;
+  const minRecommended = getMinimumRecommendedDeployCount(aliveCount);
   if (aliveSquad.length === 0) {
     endRun("defeat", "已无可部署特工。");
     return;
+  }
+  if (
+    aliveSquad.length < minRecommended &&
+    state.run.onboarding &&
+    state.run.onboarding.guidanceActive &&
+    !state.run.onboarding.underfilledDeployConfirmed
+  ) {
+    state.run.onboarding.underfilledDeployConfirmed = true;
+    addLog(
+      `当前仅部署 ${aliveSquad.length} 名特工，容错较低。建议补至至少 ${minRecommended} 人；再次点击“部署到节点”可继续。`,
+      {
+        phase: "squad",
+        tone: "warn",
+      }
+    );
+    render();
+    return;
+  }
+  if (state.run.onboarding) {
+    state.run.onboarding.underfilledDeployConfirmed = false;
   }
 
   const enemy = buildEnemy();
@@ -1893,6 +1968,21 @@ function deployBattle() {
     operationEffects.forEach((line) => addLog(line, { phase: "battle", tone: "info" }));
   }
   addLog(`${enemy.name}已接敌，意图：${enemy.intent.label}。`, { phase: "battle", tone: "info" });
+  if (
+    state.run.onboarding &&
+    state.run.onboarding.guidanceActive &&
+    state.run.nodeIndex === 0 &&
+    !state.run.onboarding.openingBattleHintShown
+  ) {
+    addLog("战斗提示：优先读“敌方意图”；攻击/防御都会 +1 能量，高威胁回合可先防御。", {
+      phase: "battle",
+      tone: "info",
+    });
+    state.run.onboarding.openingBattleHintShown = true;
+    if (state.onboarding) {
+      state.onboarding.firstRunGuidancePending = false;
+    }
+  }
   render();
 }
 
@@ -3236,7 +3326,9 @@ function renderFlowChain(fromNodeIndex, toNodeIndex, rewardTitle = "") {
   `;
 }
 
-function renderDeployChecklist(selectedOperation, deployedAliveCount, aliveCount) {
+function renderDeployChecklist(selectedOperation, deployedAliveCount, aliveCount, minRecommendedDeploy) {
+  const minDeploy = Math.max(1, minRecommendedDeploy || 1);
+  const resilienceReady = deployedAliveCount >= minDeploy;
   const checks = [
     {
       label: "协议锁定",
@@ -3246,7 +3338,13 @@ function renderDeployChecklist(selectedOperation, deployedAliveCount, aliveCount
     {
       label: "部署人数",
       done: deployedAliveCount > 0,
-      detail: `${deployedAliveCount}/${CONFIG.maxSquadSize}`,
+      detail: `${deployedAliveCount}/${CONFIG.maxSquadSize}（建议满编）`,
+    },
+    {
+      label: "开局容错",
+      done: resilienceReady,
+      warn: deployedAliveCount > 0 && !resilienceReady,
+      detail: resilienceReady ? `至少 ${minDeploy} 人` : `建议至少 ${minDeploy} 人`,
     },
     {
       label: "可行动特工",
@@ -3258,7 +3356,7 @@ function renderDeployChecklist(selectedOperation, deployedAliveCount, aliveCount
   return `
     <div class="deploy-checklist">
       ${checks.map((item) => `
-        <article class="deploy-check-item ${item.done ? "done" : "pending"}">
+        <article class="deploy-check-item ${item.done ? "done" : item.warn ? "warn" : "pending"}">
           <small>${item.label}</small>
           <strong>${item.detail}</strong>
         </article>
@@ -3444,14 +3542,14 @@ function renderNodeOperationPanel() {
           <h4>尚未锁定节点协议</h4>
           <span class="chip operation-chip-pending">必选</span>
         </div>
-        <p class="muted">部署前请先选择 1 项协议，再确认风险等级与战斗节奏。</p>
+        <p class="muted">部署前请先选择 1 项协议（每项都包含收益与代价），再确认开局节奏。</p>
       </article>
     `;
 
   return `
     <article class="panel panel-visual" style="margin-bottom:12px;">
-      <h3>节点协议（必选）</h3>
-      <p class="muted">部署前请选择一个风险/收益修正项。不同协议会改变整场战斗节奏。</p>
+      <h3>节点协议（必选 1 项）</h3>
+      <p class="muted">每项协议 = 1 条收益 + 1 条代价。可先比较压力等级，首轮建议优先选择 2-3 格风险。</p>
       ${overview}
       <div class="card-grid">
         ${options
@@ -3581,9 +3679,18 @@ function renderTitle() {
         <div class="title-copy">
           <h2 class="screen-title">寂静协议</h2>
           <p>组建一支 3 人智能体突击小队，击穿 4 个递进节点，并摧毁寂静核心。</p>
+          <p class="title-goal">本局目标：每个节点完成“选协议 → 打赢战斗 → 选 1 项指令”，清完 4 节点即胜利。</p>
+          <article class="title-quickstart">
+            <h3>首次行动速览（约 2 分钟）</h3>
+            <ol class="title-steps">
+              <li>节点准备：锁定 1 项协议，并确认部署位。</li>
+              <li>节点战斗：每回合选择 1 个行动，先看敌方意图。</li>
+              <li>指令奖励：胜利后安装 1 项升级，再推进下一节点。</li>
+            </ol>
+          </article>
           <p class="muted">纯本地静态原型，无后端。聚焦角色协同与快节奏战术短局。</p>
           <div class="row">
-            <button class="btn primary" data-action="start-run">开始行动</button>
+            <button class="btn primary" data-action="start-run">开始行动（首轮约 2 分钟）</button>
           </div>
         </div>
         <div class="title-art" aria-hidden="true">
@@ -3622,6 +3729,7 @@ function renderSquad() {
   const node = getCurrentNode();
   const aliveCount = state.run.roster.filter((agent) => agent.hp > 0).length;
   const deployedAliveCount = getAliveAgents(state.run.squadIds).length;
+  const minRecommendedDeploy = getMinimumRecommendedDeployCount(aliveCount);
   const deployDisabled =
     state.run.squadIds.length === 0 ||
     aliveCount === 0 ||
@@ -3652,6 +3760,29 @@ function renderSquad() {
   const loopHintText = transitionCompleted
     ? "上一节点已完成奖励衔接，确认编组后可直接进入下一战。"
     : "先锁定节点协议，再确认部署位后进入战斗。";
+  const underfilledDeploy = deployedAliveCount > 0 && deployedAliveCount < minRecommendedDeploy;
+  const onboardingActive = Boolean(state.run.onboarding && state.run.onboarding.guidanceActive);
+  const showOpeningGuide = onboardingActive && state.run.nodeIndex === 0 && !transitionCompleted;
+  const deployButtonLabel =
+    !selectedOperation
+      ? "先锁定协议"
+      : deployedAliveCount === 0
+        ? "先选择部署特工"
+        : underfilledDeploy
+          ? "部署到节点（低容错）"
+          : "部署到节点";
+  let squadNextAction = "可部署：点击“部署到节点”开始本节点战斗。";
+  let squadNextActionTone = "ready";
+  if (!selectedOperation) {
+    squadNextAction = "下一步：先在下方“节点协议”中选择 1 项方案。";
+    squadNextActionTone = "pending";
+  } else if (deployedAliveCount === 0) {
+    squadNextAction = "下一步：在下方勾选至少 1 名特工进入部署位。";
+    squadNextActionTone = "pending";
+  } else if (underfilledDeploy) {
+    squadNextAction = `提示：当前仅 ${deployedAliveCount} 人，建议补至至少 ${minRecommendedDeploy} 人再开战。`;
+    squadNextActionTone = "warn";
+  }
 
   screenRoot.innerHTML = `
     <section class="squad-screen">
@@ -3659,6 +3790,24 @@ function renderSquad() {
         <h2 class="screen-title">小队编成</h2>
         <small>已选 ${state.run.squadIds.length}/${CONFIG.maxSquadSize}</small>
       </div>
+
+      ${
+        showOpeningGuide
+          ? `
+        <article class="panel panel-visual onboarding-brief">
+          <div class="row spread">
+            <h3>首轮即时目标</h3>
+            <span class="chip">节点 1/${state.run.maxNode}</span>
+          </div>
+          <p>先完成 3 步：锁定协议 → 确认部署位 → 点击“部署到节点”。</p>
+          <div class="chip-row">
+            <span class="chip">短期目标：先拿到第 1 项指令奖励</span>
+            <span class="chip">失败条件：全队离线</span>
+          </div>
+        </article>
+      `
+          : ""
+      }
 
       ${renderOuterLoopRail("squad", {
         transitionCompleted,
@@ -3681,7 +3830,10 @@ function renderSquad() {
           </span>
           ${threatLabels}
         </div>
-        ${renderDeployChecklist(selectedOperation, deployedAliveCount, aliveCount)}
+        ${renderDeployChecklist(selectedOperation, deployedAliveCount, aliveCount, minRecommendedDeploy)}
+        <p class="squad-next-action squad-next-action-${squadNextActionTone}">
+          ${squadNextAction}
+        </p>
         ${renderSquadRosterDigest(stagedSquad)}
         <div class="node-brief-grid">
           <article class="node-brief-item">
@@ -3797,7 +3949,7 @@ function renderSquad() {
       ${renderDirectiveList()}
 
       <div class="row" style="margin-top:12px;">
-        <button class="btn primary" data-action="deploy" ${deployDisabled ? "disabled" : ""}>部署到节点</button>
+        <button class="btn primary" data-action="deploy" ${deployDisabled ? "disabled" : ""}>${deployButtonLabel}</button>
         <button class="btn warn" data-action="abort-run">终止行动</button>
       </div>
 
