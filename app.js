@@ -729,7 +729,7 @@ function getRunPhaseLabel(screen = state.screen) {
     return "节点战斗";
   }
   if (screen === "reward") {
-    return "奖励择取";
+    return "指令奖励";
   }
   if (screen === "run-end") {
     return "行动结算";
@@ -2936,12 +2936,12 @@ function formatAgentStatus(agent) {
 
 function renderDirectiveList() {
   if (!state.run) {
-    return '<p class="muted">尚未安装常驻指令。</p>';
+    return '<p class="muted">尚未装载常驻指令，完成节点奖励后会显示在这里。</p>';
   }
 
   const entries = Object.entries(state.run.rewardTally);
   if (entries.length === 0) {
-    return '<p class="muted">尚未安装常驻指令。</p>';
+    return '<p class="muted">尚未装载常驻指令，完成节点奖励后会显示在这里。</p>';
   }
 
   const labels = entries
@@ -3367,7 +3367,7 @@ function renderOuterLoopRail(view, options = {}) {
 function renderFlowChain(fromNodeIndex, toNodeIndex, rewardTitle = "") {
   const fromNode = Math.max(1, fromNodeIndex || 1);
   const toNode = Math.max(fromNode, toNodeIndex || fromNode);
-  const rewardStep = rewardTitle ? `安装 ${rewardTitle}` : "选择指令奖励";
+  const rewardStep = rewardTitle ? `安装 ${rewardTitle}` : "选择 1 项指令";
   const rewardClass = rewardTitle ? "complete" : "pending";
 
   return `
@@ -4054,6 +4054,24 @@ function renderBattle() {
   const basicActionDisabled = actionLocked || !actor;
   const skillDisabled = actionLocked || !actor || actor.energy < skillCost;
   const burstDisabled = actionLocked || !actor || actor.energy < 3;
+  const actionLockReason = state.battle.pendingFinish
+    ? "节点结算中，暂不可操作。"
+    : decisionLocked
+      ? "链路同步中，暂不可操作。"
+      : !actor
+        ? "当前无可操控特工。"
+        : "";
+  const basicDisableReason = basicActionDisabled ? actionLockReason || "当前无可操控特工。" : "";
+  const skillDisableReason = skillDisabled
+    ? actionLocked || !actor
+      ? actionLockReason || "当前无可操控特工。"
+      : `能量不足：需要 ${skillCost} 点。`
+    : "";
+  const burstDisableReason = burstDisabled
+    ? actionLocked || !actor
+      ? actionLockReason || "当前无可操控特工。"
+      : "能量不足：需要 3 点。"
+    : "";
   const skillActionLabel = actor ? `${actor.skill.title}（-${skillCost} 能量）` : "技能";
   const isRecentAction = (type) =>
     Boolean(state.battle.lastActionType === type && state.battle.lastActionUntil > now);
@@ -4068,7 +4086,7 @@ function renderBattle() {
         ? "结算完成，可继续决策。"
         : !actor
           ? "当前无可操控特工，操作已锁定。"
-        : "";
+          : "已进入指令窗口，可继续决策。";
   const battleFinishTitle = finishPhase === "handoff" ? "节点清除完成" : "目标崩解";
   const battleFinishSubline =
     finishPhase === "handoff" ? "结算完成，正在解码可用指令。" : "敌方主链路已断开，正在回收战场残留。";
@@ -4196,7 +4214,7 @@ function renderBattle() {
                 ${selectedControlChip ? `<div class="chip-row" style="margin-top:8px;">${selectedControlChip}</div>` : ""}
                 <p class="muted" style="margin-top:8px;">${agent.skill.title}: ${agent.skill.desc}</p>
                 <div class="row" style="margin-top:10px;">
-                  <button class="btn actor-select-btn ${selected ? "is-selected" : ""}" data-action="select-actor" data-agent-id="${agent.id}" ${actionLocked ? "disabled" : ""}>${selected ? "操控中" : "切换操控"}</button>
+                  <button class="btn actor-select-btn ${selected ? "is-selected" : ""}" data-action="select-actor" data-agent-id="${agent.id}" ${actionLocked ? "disabled" : ""} title="${actionLocked ? actionLockReason || "结算处理中，稍后可切换操控。" : selected ? "当前操控中" : "切换为当前操控"}">${selected ? "操控中" : "切换操控"}</button>
                 </div>
               </article>
             `;
@@ -4276,14 +4294,14 @@ function renderBattle() {
       }
 
       <div class="actions ${actionFlowClass}">
-        <button class="btn primary action-btn attack ${isRecentAction("attack") ? "recent" : ""}" data-action="do-attack" ${basicActionDisabled ? "disabled" : ""}>攻击（+1 能量）</button>
-        <button class="btn action-btn guard ${isRecentAction("defend") ? "recent" : ""}" data-action="do-defend" ${basicActionDisabled ? "disabled" : ""}>防御（+1 能量）</button>
-        <button class="btn action-btn skill ${isRecentAction("skill") ? "recent" : ""}" data-action="do-skill" ${skillDisabled ? "disabled" : ""}>${skillActionLabel}</button>
-        <button class="btn action-btn burst ${isRecentAction("burst") ? "recent" : ""}" data-action="do-burst" ${burstDisabled ? "disabled" : ""}>同步爆发（-3 能量）</button>
+        <button class="btn primary action-btn attack ${isRecentAction("attack") ? "recent" : ""}" data-action="do-attack" ${basicActionDisabled ? "disabled" : ""} ${basicDisableReason ? `title="${basicDisableReason}"` : ""}>攻击（+1 能量）</button>
+        <button class="btn action-btn guard ${isRecentAction("defend") ? "recent" : ""}" data-action="do-defend" ${basicActionDisabled ? "disabled" : ""} ${basicDisableReason ? `title="${basicDisableReason}"` : ""}>防御（+1 能量）</button>
+        <button class="btn action-btn skill ${isRecentAction("skill") ? "recent" : ""}" data-action="do-skill" ${skillDisabled ? "disabled" : ""} ${skillDisableReason ? `title="${skillDisableReason}"` : ""}>${skillActionLabel}</button>
+        <button class="btn action-btn burst ${isRecentAction("burst") ? "recent" : ""}" data-action="do-burst" ${burstDisabled ? "disabled" : ""} ${burstDisableReason ? `title="${burstDisableReason}"` : ""}>同步爆发（-3 能量）</button>
       </div>
 
       <p class="battle-controller-readout">当前操控：<strong>${actor ? actor.name : "无"}</strong></p>
-      ${flowHint ? `<p class="battle-flow-hint ${actionFlowClass}">${flowHint}</p>` : ""}
+      <p class="battle-flow-hint ${actionFlowClass}">${flowHint}</p>
       ${renderDirectivePanel("指令栈")}
     </section>
   `;
@@ -4344,9 +4362,9 @@ function renderReward() {
           state.pendingRewards.length === 0
             ? `
               <article class="panel panel-visual reward-empty">
-                <p class="muted">当前没有可安装的奖励指令。</p>
-                <p class="muted">可按基础配置直接推进至下一节点。</p>
-                <button class="btn" data-action="continue-without-reward">按基础配置继续</button>
+                <p class="muted">当前未解码到可安装指令。</p>
+                <p class="muted">${hasNextNode ? "将按基础配置推进至下一节点。" : "将按基础配置进入行动结算。"}</p>
+                <button class="btn" data-action="continue-without-reward">按基础配置推进</button>
               </article>
             `
             : state.pendingRewards
@@ -4383,7 +4401,7 @@ function renderRunEnd() {
   const isWin = state.runResult === "victory";
   const title = isWin ? "行动完成" : "行动失败";
   const subtitle = isWin
-    ? "寂静核心已崩塌，小队成功撤离。"
+    ? "寂静核心已被摧毁，小队成功撤离。"
     : "核心中和前小队已被歼灭。";
 
   const directives =
