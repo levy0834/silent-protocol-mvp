@@ -317,6 +317,21 @@ const DANGER_LABELS = {
   Boss: "首领战",
 };
 
+const DANGER_VISUALS = {
+  Skirmish: {
+    short: "遭遇",
+    style: "skirmish",
+  },
+  Elite: {
+    short: "精英",
+    style: "elite",
+  },
+  Boss: {
+    short: "首领",
+    style: "boss",
+  },
+};
+
 const ROLE_LABELS = {
   Tactician: "战术型",
   Vanguard: "先锋型",
@@ -329,6 +344,169 @@ const THREAT_LABELS = {
   medium: "中",
   high: "高",
   extreme: "极高",
+};
+
+const ROLE_VISUALS = {
+  Tactician: {
+    badge: "战术",
+    color: "#63def6",
+    soft: "#213a52",
+    icon: "预判",
+  },
+  Vanguard: {
+    badge: "先锋",
+    color: "#71f0b8",
+    soft: "#203f39",
+    icon: "壁垒",
+  },
+  Skirmisher: {
+    badge: "游击",
+    color: "#ff9b74",
+    soft: "#442727",
+    icon: "突袭",
+  },
+  Support: {
+    badge: "支援",
+    color: "#c59cff",
+    soft: "#3b2b4b",
+    icon: "修复",
+  },
+};
+
+const ENEMY_VISUALS = {
+  warden: {
+    badge: "防御体",
+    color: "#ff8b6a",
+    soft: "#4a2920",
+  },
+  hunter: {
+    badge: "猎杀体",
+    color: "#ffb36c",
+    soft: "#4b3420",
+  },
+  siren: {
+    badge: "扰乱体",
+    color: "#ff7bac",
+    soft: "#4d2037",
+  },
+  brute: {
+    badge: "重锤体",
+    color: "#ff6f74",
+    soft: "#4c2426",
+  },
+  prime: {
+    badge: "主核",
+    color: "#ffd37a",
+    soft: "#4e371f",
+  },
+};
+
+const NODE_OPERATION_VISUALS = {
+  "overclock-surge": {
+    style: "overclock",
+    tone: "高风险高收益",
+    rewardTag: "增幅",
+    riskTag: "反噪",
+    riskLevel: 4,
+  },
+  "firewall-breach": {
+    style: "breach",
+    tone: "破墙窗口",
+    rewardTag: "破绽",
+    riskTag: "装甲",
+    riskLevel: 3,
+  },
+  "kinetic-shielding": {
+    style: "shielding",
+    tone: "稳态开局",
+    rewardTag: "护盾",
+    riskTag: "充能",
+    riskLevel: 2,
+  },
+  "jam-override": {
+    style: "jam",
+    tone: "干扰博弈",
+    rewardTag: "削攻",
+    riskTag: "阻断",
+    riskLevel: 2,
+  },
+};
+
+const INTENT_ICONS = {
+  strike: "直击",
+  pierce: "穿刺",
+  sweep: "横扫",
+  jam: "干扰",
+  fortify: "加固",
+  overload: "过载",
+  lockdown: "封锁",
+  annihilate: "湮灭",
+};
+
+const REWARD_VISUALS = {
+  "nanite-sweep": {
+    style: "repair",
+    tone: "即时修复",
+    badge: "一次性",
+    color: "#7aefc4",
+    soft: "#1f4439",
+  },
+  "kinetic-compiler": {
+    style: "offense",
+    tone: "火力强化",
+    badge: "常驻",
+    color: "#75bcff",
+    soft: "#223a56",
+  },
+  "cold-start-cells": {
+    style: "energy",
+    tone: "充能加速",
+    badge: "可叠层",
+    color: "#6ad6ff",
+    soft: "#1d3a4b",
+  },
+  "self-repair-daemon": {
+    style: "daemon",
+    tone: "战后维护",
+    badge: "可叠层",
+    color: "#75e7b4",
+    soft: "#21463b",
+  },
+  "seer-uplink": {
+    style: "tactician",
+    tone: "战术上行",
+    badge: "限定",
+    color: "#7ed5ff",
+    soft: "#223b50",
+  },
+  "bulwark-mesh": {
+    style: "vanguard",
+    tone: "防线联动",
+    badge: "限定",
+    color: "#8deeb9",
+    soft: "#20463d",
+  },
+  "ghost-firmware": {
+    style: "skirmisher",
+    tone: "突袭固件",
+    badge: "限定",
+    color: "#ffb38f",
+    soft: "#492e26",
+  },
+  "loom-injector": {
+    style: "support",
+    tone: "补给增幅",
+    badge: "限定",
+    color: "#cdabff",
+    soft: "#3a2b4d",
+  },
+  "hull-splice": {
+    style: "hull",
+    tone: "耐久重构",
+    badge: "可叠层",
+    color: "#ffcb8a",
+    soft: "#4a3521",
+  },
 };
 
 function randInt(min, max) {
@@ -352,12 +530,121 @@ function getDangerLabel(danger) {
   return DANGER_LABELS[danger] || danger;
 }
 
+function getDangerVisual(danger) {
+  return (
+    DANGER_VISUALS[danger] || {
+      short: "未知",
+      style: "unknown",
+    }
+  );
+}
+
 function getRoleLabel(role) {
   return ROLE_LABELS[role] || role;
 }
 
 function getThreatLabel(threat) {
   return THREAT_LABELS[threat] || threat;
+}
+
+function getRoleVisual(role) {
+  return (
+    ROLE_VISUALS[role] || {
+      badge: "智能体",
+      color: "#8eb5bc",
+      soft: "#263841",
+      icon: "特勤",
+    }
+  );
+}
+
+function getEnemyVisual(enemyId) {
+  return (
+    ENEMY_VISUALS[enemyId] || {
+      badge: "未知体",
+      color: "#d98f7d",
+      soft: "#473129",
+    }
+  );
+}
+
+function getNodeOperationVisual(operationId) {
+  return (
+    NODE_OPERATION_VISUALS[operationId] || {
+      style: "neutral",
+      tone: "协议调制",
+      rewardTag: "收益",
+      riskTag: "风险",
+      riskLevel: 2,
+    }
+  );
+}
+
+function getIntentIcon(intentId) {
+  return INTENT_ICONS[intentId] || "例程";
+}
+
+function getRewardVisual(rewardId) {
+  return (
+    REWARD_VISUALS[rewardId] || {
+      style: "neutral",
+      tone: "指令增益",
+      badge: "常规",
+      color: "#8cb5bf",
+      soft: "#253a42",
+    }
+  );
+}
+
+function renderRewardGlyph(rewardId) {
+  const visual = getRewardVisual(rewardId);
+  const glyphs = {
+    repair: `
+      <circle cx="38" cy="34" r="15" fill="none" stroke="#dffdf4" stroke-width="3.2"></circle>
+      <path d="M38 25 V43 M29 34 H47" stroke="#dffdf4" stroke-width="3.4" stroke-linecap="round"></path>
+    `,
+    offense: `
+      <path d="M18 44 L36 18 L52 34 L66 20" fill="none" stroke="#e3f3ff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path d="M60 20 H67 V27" fill="none" stroke="#e3f3ff" stroke-width="3.2" stroke-linecap="round"></path>
+    `,
+    energy: `
+      <path d="M36 16 L24 36 H38 L30 56 L50 33 H38 Z" fill="none" stroke="#def8ff" stroke-width="3.2" stroke-linejoin="round"></path>
+    `,
+    daemon: `
+      <rect x="22" y="20" width="32" height="30" rx="5" fill="none" stroke="#ddfff1" stroke-width="3"></rect>
+      <circle cx="38" cy="35" r="6" fill="none" stroke="#ddfff1" stroke-width="2.5"></circle>
+      <path d="M54 35 H63" stroke="#ddfff1" stroke-width="3" stroke-linecap="round"></path>
+    `,
+    tactician: `
+      <ellipse cx="38" cy="32" rx="16" ry="9" fill="none" stroke="#d8f6ff" stroke-width="3.2"></ellipse>
+      <circle cx="38" cy="32" r="4" fill="#d8f6ff"></circle>
+      <path d="M24 47 L38 39 L52 47" fill="none" stroke="#d8f6ff" stroke-width="3.2" stroke-linecap="round"></path>
+    `,
+    vanguard: `
+      <path d="M38 16 L56 25 L52 47 Q38 60 24 47 L20 25 Z" fill="none" stroke="#dfffee" stroke-width="3.2"></path>
+      <path d="M38 26 V44 M30 35 H46" stroke="#dfffee" stroke-width="3.2" stroke-linecap="round"></path>
+    `,
+    skirmisher: `
+      <path d="M24 48 L52 20" stroke="#ffe7de" stroke-width="4" stroke-linecap="round"></path>
+      <path d="M24 24 L52 52" stroke="#ffe7de" stroke-width="2.5" stroke-linecap="round" opacity="0.85"></path>
+    `,
+    support: `
+      <path d="M24 22 L52 50 M52 22 L24 50" stroke="#f4e8ff" stroke-width="3.2" stroke-linecap="round"></path>
+      <circle cx="38" cy="36" r="7" fill="none" stroke="#f4e8ff" stroke-width="2.6"></circle>
+    `,
+    hull: `
+      <rect x="20" y="22" width="36" height="28" rx="6" fill="none" stroke="#fff0da" stroke-width="3.2"></rect>
+      <path d="M28 34 H48 M28 41 H44" stroke="#fff0da" stroke-width="2.8" stroke-linecap="round"></path>
+    `,
+  };
+  const glyph = glyphs[visual.style] || '<circle cx="38" cy="34" r="11" fill="none" stroke="#deedf4" stroke-width="3"></circle>';
+  return `
+    <div class="reward-glyph reward-${visual.style}" style="--reward-main:${visual.color}; --reward-soft:${visual.soft};">
+      <svg viewBox="0 0 76 68" aria-hidden="true">
+        ${glyph}
+      </svg>
+    </div>
+  `;
 }
 
 function addLog(text) {
@@ -1294,8 +1581,12 @@ function performAction(actionType) {
   if (state.battle.enemy.hp <= 0) {
     state.battle.lastResolution = {
       turn: state.battle.turn,
+      actionLabel,
       player: `${actor.name}使用${actionLabel}造成 ${playerDamage} 点伤害。`,
       enemy: `${state.battle.enemy.name}在敌方行动前已崩解。`,
+      playerDamage,
+      enemyDamage: 0,
+      intentThreat: "low",
     };
     addLog(`${state.battle.enemy.name}已崩解。`);
     onBattleWin();
@@ -1310,8 +1601,11 @@ function performAction(actionType) {
 
   state.battle.lastResolution = {
     turn: state.battle.turn,
+    actionLabel,
     player: `${actor.name}使用${actionLabel}造成 ${playerDamage} 点伤害。`,
     enemy: `${state.battle.enemy.name}完成了${resolvedIntentLabel}，对小队造成 ${enemyDamage} 点总伤害。`,
+    playerDamage,
+    enemyDamage,
     intentThreat: INTENT_META[resolvedIntentId] ? INTENT_META[resolvedIntentId].threat : "medium",
   };
 
@@ -1470,6 +1764,208 @@ function renderHpBar(current, max, variant) {
   `;
 }
 
+function renderEnergyCells(current, max = CONFIG.energyCap) {
+  const safeMax = Math.max(1, max);
+  const safeCurrent = clamp(current, 0, safeMax);
+  return `
+    <div class="energy-cells" aria-hidden="true">
+      ${Array.from({ length: safeMax }, (_, index) => {
+        const filled = index < safeCurrent ? "filled" : "";
+        return `<span class="energy-cell ${filled}"></span>`;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderAgentPortrait(agent) {
+  const visual = getRoleVisual(agent.role);
+  const glyphs = {
+    seer: `
+      <ellipse cx="48" cy="48" rx="18" ry="10" fill="none" stroke="#d6fbff" stroke-width="4"/>
+      <circle cx="48" cy="48" r="5" fill="#d6fbff"/>
+      <path d="M32 65 L48 56 L64 65" fill="none" stroke="#d6fbff" stroke-width="4" stroke-linecap="round"/>
+    `,
+    bulwark: `
+      <path d="M48 20 L70 30 L66 56 Q48 76 30 56 L26 30 Z" fill="none" stroke="#dbffe7" stroke-width="4"/>
+      <path d="M48 30 L48 58" stroke="#dbffe7" stroke-width="4" stroke-linecap="round"/>
+      <path d="M38 45 L58 45" stroke="#dbffe7" stroke-width="4" stroke-linecap="round"/>
+    `,
+    ghost: `
+      <path d="M34 64 L64 30" stroke="#ffe5de" stroke-width="5" stroke-linecap="round"/>
+      <path d="M33 34 L63 64" stroke="#ffe5de" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+      <path d="M24 54 L40 70" stroke="#ffe5de" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+    `,
+    loom: `
+      <path d="M30 30 L66 66 M66 30 L30 66" stroke="#efe6ff" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="48" cy="48" r="8" fill="none" stroke="#efe6ff" stroke-width="3"/>
+      <circle cx="48" cy="48" r="2.5" fill="#efe6ff"/>
+    `,
+  };
+  const glyph = glyphs[agent.id] || '<circle cx="48" cy="48" r="12" fill="#eaf8ff"/>';
+  const offlineClass = agent.hp <= 0 ? "offline" : "";
+
+  return `
+    <div class="portrait-shell ${offlineClass}" style="--portrait-main:${visual.color}; --portrait-soft:${visual.soft};">
+      <svg class="portrait-svg" viewBox="0 0 96 96" aria-hidden="true">
+        <circle cx="48" cy="48" r="38" fill="var(--portrait-soft)"></circle>
+        <circle cx="48" cy="48" r="32" fill="none" stroke="var(--portrait-main)" stroke-width="2.5" opacity="0.65"></circle>
+        <circle cx="48" cy="48" r="24" fill="#0c1820" opacity="0.5"></circle>
+        ${glyph}
+      </svg>
+      <span class="portrait-badge">${visual.badge}</span>
+    </div>
+  `;
+}
+
+function renderEnemyPortrait(enemy) {
+  const visual = getEnemyVisual(enemy.id);
+  const glyphs = {
+    warden: `
+      <rect x="30" y="24" width="36" height="48" rx="6" fill="none" stroke="#ffe8df" stroke-width="4"></rect>
+      <path d="M36 44 H60 M36 54 H60" stroke="#ffe8df" stroke-width="3" stroke-linecap="round"></path>
+    `,
+    hunter: `
+      <path d="M24 66 L46 22 L72 66" fill="none" stroke="#fff2e2" stroke-width="4" stroke-linejoin="round"></path>
+      <circle cx="48" cy="50" r="5" fill="#fff2e2"></circle>
+    `,
+    siren: `
+      <path d="M26 60 Q48 20 70 60" fill="none" stroke="#ffe6f0" stroke-width="4"></path>
+      <path d="M32 66 Q48 40 64 66" fill="none" stroke="#ffe6f0" stroke-width="3"></path>
+      <circle cx="48" cy="36" r="4" fill="#ffe6f0"></circle>
+    `,
+    brute: `
+      <rect x="26" y="34" width="44" height="30" rx="4" fill="none" stroke="#ffe3e3" stroke-width="4"></rect>
+      <path d="M26 46 H18 M70 46 H78" stroke="#ffe3e3" stroke-width="4" stroke-linecap="round"></path>
+    `,
+    prime: `
+      <circle cx="48" cy="48" r="24" fill="none" stroke="#fff1d8" stroke-width="4"></circle>
+      <circle cx="48" cy="48" r="10" fill="none" stroke="#fff1d8" stroke-width="3"></circle>
+      <path d="M48 18 V30 M48 66 V78 M18 48 H30 M66 48 H78" stroke="#fff1d8" stroke-width="3" stroke-linecap="round"></path>
+    `,
+  };
+  const glyph = glyphs[enemy.id] || '<circle cx="48" cy="48" r="12" fill="#f4e2dd"/>';
+  return `
+    <div class="portrait-shell enemy" style="--portrait-main:${visual.color}; --portrait-soft:${visual.soft};">
+      <svg class="portrait-svg" viewBox="0 0 96 96" aria-hidden="true">
+        <circle cx="48" cy="48" r="38" fill="var(--portrait-soft)"></circle>
+        <circle cx="48" cy="48" r="32" fill="none" stroke="var(--portrait-main)" stroke-width="2.5" opacity="0.8"></circle>
+        <circle cx="48" cy="48" r="24" fill="#1a1311" opacity="0.55"></circle>
+        ${glyph}
+      </svg>
+      <span class="portrait-badge">${visual.badge}</span>
+    </div>
+  `;
+}
+
+function renderProtocolGlyph(operationId) {
+  const visual = getNodeOperationVisual(operationId);
+  const glyphs = {
+    "overclock-surge": `
+      <path d="M42 14 L28 36 H44 L36 58 L58 32 H42 Z" fill="none" stroke="#dffdf7" stroke-width="3.5" stroke-linejoin="round"></path>
+    `,
+    "firewall-breach": `
+      <rect x="22" y="20" width="40" height="40" rx="6" fill="none" stroke="#f7f0ff" stroke-width="3"></rect>
+      <path d="M44 20 V60 M22 40 H62" stroke="#f7f0ff" stroke-width="3"></path>
+      <path d="M62 40 L74 40" stroke="#f7f0ff" stroke-width="3.5" stroke-linecap="round"></path>
+    `,
+    "kinetic-shielding": `
+      <path d="M42 14 L64 24 L60 50 Q42 70 24 50 L20 24 Z" fill="none" stroke="#ebfff2" stroke-width="3.5"></path>
+      <path d="M42 28 V50 M32 40 H52" stroke="#ebfff2" stroke-width="3.5" stroke-linecap="round"></path>
+    `,
+    "jam-override": `
+      <circle cx="42" cy="38" r="16" fill="none" stroke="#f6efff" stroke-width="3"></circle>
+      <path d="M28 52 L56 24 M56 52 L28 24" stroke="#f6efff" stroke-width="3.5" stroke-linecap="round"></path>
+      <path d="M62 32 H74 M62 44 H74" stroke="#f6efff" stroke-width="3"></path>
+    `,
+  };
+  const glyph = glyphs[operationId] || '<circle cx="42" cy="38" r="12" fill="none" stroke="#dbecf7" stroke-width="3"></circle>';
+  return `
+    <div class="protocol-glyph protocol-${visual.style}">
+      <svg viewBox="0 0 84 76" aria-hidden="true">
+        ${glyph}
+      </svg>
+    </div>
+  `;
+}
+
+function renderIntentSequenceTrack(enemy, count = 4) {
+  if (!enemy || !enemy.intent) {
+    return "";
+  }
+
+  const pattern = Array.isArray(enemy.pattern) && enemy.pattern.length > 0 ? enemy.pattern : [enemy.intent.id];
+  const ids = [enemy.intent.id];
+  for (let i = 0; i < count - 1; i += 1) {
+    const nextId = pattern[(enemy.patternIndex + i + 1) % pattern.length];
+    ids.push(nextId);
+  }
+
+  return `
+    <div class="intent-track">
+      ${ids
+        .map((intentId, index) => {
+          const isCurrent = index === 0 ? "current" : "";
+          return `
+            <span class="intent-step ${isCurrent}">
+              <span class="intent-step-icon">${getIntentIcon(intentId)}</span>
+              <span class="intent-step-label">${getIntentLabel(intentId)}</span>
+            </span>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderImpactBar(value, variant) {
+  const amount = Math.max(0, value || 0);
+  const width = amount <= 0 ? 0 : clamp(Math.round((amount / 24) * 100), 10, 100);
+  return `
+    <div class="impact-track ${variant}">
+      <span class="impact-fill" style="width:${width}%"></span>
+      <strong>${amount}</strong>
+    </div>
+  `;
+}
+
+function renderStageBadge(danger, fallbackLabel = "未知威胁") {
+  if (!danger) {
+    return `<span class="stage-badge stage-unknown">${fallbackLabel}</span>`;
+  }
+  const visual = getDangerVisual(danger);
+  return `
+    <span class="stage-badge stage-${visual.style}">
+      <span class="stage-badge-dot"></span>
+      ${getDangerLabel(danger)}
+    </span>
+  `;
+}
+
+function renderStageProgress(activeIndex, clearedCount = 0) {
+  if (!state.run) {
+    return "";
+  }
+  const nodes = NODE_PLAN.slice(0, state.run.maxNode);
+  return `
+    <div class="stage-progress" aria-label="节点进度">
+      ${nodes
+        .map((node, index) => {
+          const visual = getDangerVisual(node.danger);
+          const isCleared = index < clearedCount;
+          const isActive = index === activeIndex;
+          const statusClass = isActive ? "active" : isCleared ? "cleared" : "upcoming";
+          return `
+            <span class="stage-node stage-${visual.style} ${statusClass}">
+              <small>节点 ${index + 1}</small>
+              <strong>${visual.short}</strong>
+            </span>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
 function renderBossPhaseReference(bossTemplate) {
   if (!bossTemplate || !bossTemplate.phasePatterns) {
     return "";
@@ -1477,11 +1973,18 @@ function renderBossPhaseReference(bossTemplate) {
 
   return `
     <p class="muted">阶段阈值：完整度 70% 进入第 2 阶段，35% 进入第 3 阶段。</p>
-    <ul>
-      <li>第 1 阶段标志序列：${formatIntentSequence(bossTemplate.phasePatterns[1])}</li>
-      <li>第 2 阶段标志序列：${formatIntentSequence(bossTemplate.phasePatterns[2])}</li>
-      <li>第 3 阶段标志序列：${formatIntentSequence(bossTemplate.phasePatterns[3])}</li>
-    </ul>
+    <div class="boss-phase-reference">
+      ${[1, 2, 3]
+        .map(
+          (phase) => `
+            <div class="phase-ref-card">
+              <span class="phase-ref-badge">阶段 ${phase}</span>
+              <p>${formatIntentSequence(bossTemplate.phasePatterns[phase], 4)}</p>
+            </div>
+          `
+        )
+        .join("")}
+    </div>
   `;
 }
 
@@ -1508,6 +2011,14 @@ function renderBossBattleReadout(enemy) {
     return `
       <article class="boss-readout">
         <h3>首领读数</h3>
+        <div class="boss-integrity-track">
+          <span class="boss-integrity-fill" style="width:${integrityPct}%"></span>
+        </div>
+        <div class="boss-phase-nodes">
+          <span class="phase-node passed">一</span>
+          <span class="phase-node passed">二</span>
+          <span class="phase-node active">三</span>
+        </div>
         <div class="chip-row">
           <span class="chip">完整度 ${integrityPct}%</span>
           <span class="chip">阶段 ${currentPhase}/3</span>
@@ -1521,10 +2032,25 @@ function renderBossBattleReadout(enemy) {
   const nextSignature = formatIntentSequence(enemy.bossState.phasePatterns[nextPhase] || []);
   const shiftDistance = Math.max(0, integrityPct - thresholdPct);
   const urgentClass = shiftDistance <= 10 ? "urgent" : "";
+  const phaseNodes = [1, 2, 3]
+    .map((phase) => {
+      let cls = "";
+      if (phase < currentPhase) {
+        cls = "passed";
+      } else if (phase === currentPhase) {
+        cls = "active";
+      }
+      return `<span class="phase-node ${cls}">${phase === 1 ? "一" : phase === 2 ? "二" : "三"}</span>`;
+    })
+    .join("");
 
   return `
     <article class="boss-readout">
       <h3>首领读数</h3>
+      <div class="boss-integrity-track">
+        <span class="boss-integrity-fill" style="width:${integrityPct}%"></span>
+      </div>
+      <div class="boss-phase-nodes">${phaseNodes}</div>
       <div class="chip-row">
         <span class="chip">完整度 ${integrityPct}%</span>
         <span class="chip">阶段 ${currentPhase}/3</span>
@@ -1569,18 +2095,39 @@ function renderNodeOperationPanel() {
     .filter(Boolean);
 
   return `
-    <article class="panel" style="margin-bottom:12px;">
+    <article class="panel panel-visual" style="margin-bottom:12px;">
       <h3>节点协议（必选）</h3>
-      <p class="muted">部署前请选择一个风险/收益修正项。</p>
+      <p class="muted">部署前请选择一个风险/收益修正项。不同协议会改变整场战斗节奏。</p>
       <div class="card-grid">
         ${options
           .map((operation) => {
             const selected = operationPlan.selectedId === operation.id;
+            const visual = getNodeOperationVisual(operation.id);
+            const riskDots = Array.from({ length: 4 }, (_, index) => {
+              const active = index < visual.riskLevel ? "active" : "";
+              return `<span class="risk-dot ${active}"></span>`;
+            }).join("");
             return `
-              <article class="card ${selected ? "selected" : ""}">
-                <h3>${operation.title}</h3>
-                <p><strong>收益：</strong>${operation.reward}</p>
-                <p><strong>风险：</strong>${operation.risk}</p>
+              <article class="card protocol-card protocol-${visual.style} ${selected ? "selected" : ""}">
+                <div class="protocol-head">
+                  ${renderProtocolGlyph(operation.id)}
+                  <div>
+                    <h3>${operation.title}</h3>
+                    <p class="muted">${visual.tone}</p>
+                  </div>
+                </div>
+                <div class="protocol-line positive">
+                  <span class="protocol-tag">${visual.rewardTag}</span>
+                  <p>${operation.reward}</p>
+                </div>
+                <div class="protocol-line negative">
+                  <span class="protocol-tag">${visual.riskTag}</span>
+                  <p>${operation.risk}</p>
+                </div>
+                <div class="protocol-risk">
+                  <small>压力等级</small>
+                  <div class="risk-dots">${riskDots}</div>
+                </div>
                 <button class="btn ${selected ? "" : "primary"}" data-action="pick-node-operation" data-operation-id="${operation.id}">
                   ${selected ? "已选择" : "选择"}
                 </button>
@@ -1616,13 +2163,37 @@ function renderLog() {
 
 function renderTitle() {
   screenRoot.innerHTML = `
-    <section>
-      <h2 class="screen-title">寂静协议</h2>
-      <p>组建一支 3 人智能体突击小队，击穿 4 个递进节点，并摧毁寂静核心。</p>
-      <div class="row">
-        <button class="btn primary" data-action="start-run">开始行动</button>
+    <section class="title-screen">
+      <article class="title-hero">
+        <div class="title-copy">
+          <h2 class="screen-title">寂静协议</h2>
+          <p>组建一支 3 人智能体突击小队，击穿 4 个递进节点，并摧毁寂静核心。</p>
+          <p class="muted">纯本地静态原型，无后端。聚焦角色协同与快节奏战术短局。</p>
+          <div class="row">
+            <button class="btn primary" data-action="start-run">开始行动</button>
+          </div>
+        </div>
+        <div class="title-art" aria-hidden="true">
+          <svg viewBox="0 0 220 160">
+            <defs>
+              <linearGradient id="titleGlowA" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#5cf2c7" stop-opacity="0.95"></stop>
+                <stop offset="100%" stop-color="#5ba8ff" stop-opacity="0.7"></stop>
+              </linearGradient>
+            </defs>
+            <rect x="14" y="14" width="192" height="132" rx="14" fill="#0f1c23" stroke="#2c4e5f"></rect>
+            <circle cx="110" cy="80" r="40" fill="none" stroke="url(#titleGlowA)" stroke-width="3"></circle>
+            <circle cx="110" cy="80" r="16" fill="#0f1c23" stroke="url(#titleGlowA)" stroke-width="2.5"></circle>
+            <path d="M56 80 H88 M132 80 H164 M110 40 V56 M110 104 V120" stroke="url(#titleGlowA)" stroke-width="3" stroke-linecap="round"></path>
+            <path d="M38 46 L58 60 M182 46 L162 60 M38 114 L58 100 M182 114 L162 100" stroke="#3a7687" stroke-width="2.5" stroke-linecap="round"></path>
+          </svg>
+        </div>
+      </article>
+      <div class="title-pill-row">
+        <span class="chip">3 人小队</span>
+        <span class="chip">4 节点短局</span>
+        <span class="chip">纯前端静态运行</span>
       </div>
-      <p class="muted">纯本地静态原型，无后端。聚焦角色协同与快节奏战术短局。</p>
     </section>
   `;
 }
@@ -1642,29 +2213,45 @@ function renderSquad() {
     aliveCount === 0 ||
     !operationPlan ||
     !operationPlan.selectedId;
-  const threatLabels = node ? node.enemies.map((enemyId) => getThreatName(enemyId)) : [];
+  const threatLabels = node
+    ? node.enemies
+        .map((enemyId) => {
+          const visual = getEnemyVisual(enemyId);
+          return `<span class="chip enemy-hint" style="--enemy-accent:${visual.color}">${getThreatName(enemyId)}</span>`;
+        })
+        .join("")
+    : "";
   const bossTemplate = getNodeBossDossier(node);
 
   screenRoot.innerHTML = `
-    <section>
+    <section class="squad-screen">
       <div class="row spread">
         <h2 class="screen-title">小队编成</h2>
         <small>已选 ${state.run.squadIds.length}/${CONFIG.maxSquadSize}</small>
       </div>
 
-      <article class="panel" style="margin-bottom:12px;">
-        <h3>下一场遭遇：节点 ${state.run.nodeIndex + 1} - ${node ? node.label : "未知"}</h3>
-        <p>${node ? getDangerLabel(node.danger) : ""} 威胁等级。预测敌方：${threatLabels.join(" / ")}。</p>
+      <article class="panel panel-visual stage-panel" style="margin-bottom:12px;">
+        <div class="row spread">
+          <h3>下一场遭遇：节点 ${state.run.nodeIndex + 1} - ${node ? node.label : "未知"}</h3>
+          ${renderStageBadge(node ? node.danger : null)}
+        </div>
         <p class="muted">每次胜利后自动修复：存活特工恢复 +${state.run.mods.postBattleHeal} 生命。</p>
+        <div class="chip-row">${threatLabels}</div>
+        ${renderStageProgress(state.run.nodeIndex, state.run.nodeIndex)}
       </article>
 
       ${
         bossTemplate
           ? `
-        <article class="panel boss-dossier" style="margin-bottom:12px;">
-          <h3>首领档案：${bossTemplate.name}</h3>
-          <p class="muted">${bossTemplate.role}</p>
-          <ul>
+        <article class="panel boss-dossier panel-visual" style="margin-bottom:12px;">
+          <div class="row">
+            ${renderEnemyPortrait({ id: bossTemplate.id })}
+            <div>
+              <h3>首领档案：${bossTemplate.name}</h3>
+              <p class="muted">${bossTemplate.role}</p>
+            </div>
+          </div>
+          <ul class="boss-dossier-list">
             ${bossTemplate.dossier.map((line) => `<li>${line}</li>`).join("")}
           </ul>
           ${renderBossPhaseReference(bossTemplate)}
@@ -1681,22 +2268,36 @@ function renderSquad() {
             const checked = state.run.squadIds.includes(agent.id) ? "checked" : "";
             const dead = agent.hp <= 0;
             const skillCost = getSkillCost(agent);
+            const statusTags = formatAgentStatus(agent);
+            const roleVisual = getRoleVisual(agent.role);
 
             return `
-              <article class="card ${checked ? "selected" : ""} ${dead ? "dead" : ""}">
-                <h3>${agent.name}</h3>
-                <p>${getRoleLabel(agent.role)}</p>
+              <article class="card unit-card agent-card role-${agent.role.toLowerCase()} ${checked ? "selected" : ""} ${dead ? "dead" : ""}" style="--role-accent:${roleVisual.color};">
+                <div class="unit-head">
+                  ${renderAgentPortrait(agent)}
+                  <div class="unit-head-copy">
+                    <h3>${agent.name}</h3>
+                    <p>${getRoleLabel(agent.role)}</p>
+                    <span class="mini-badge" style="--badge-accent:${roleVisual.color}">${roleVisual.icon}</span>
+                  </div>
+                </div>
                 <div class="stat-row">
                   <span class="stat-pill">生命 ${agent.hp}/${agent.hpMax}</span>
                   <span class="stat-pill">攻击 ${agent.atk}</span>
                   <span class="stat-pill">能量 ${agent.energy}</span>
                 </div>
                 ${renderHpBar(agent.hp, agent.hpMax, "ally")}
+                ${renderEnergyCells(agent.energy)}
+                ${
+                  statusTags.length > 0
+                    ? `<div class="chip-row">${statusTags.map((tag) => `<span class="chip">${tag}</span>`).join("")}</div>`
+                    : '<div class="chip-row"><span class="chip">状态稳定</span></div>'
+                }
                 <p class="muted" style="margin-top:8px;">技能：${agent.skill.title}（消耗 ${skillCost} 能量）</p>
                 <p class="muted">${agent.passive}</p>
-                <label class="row" style="margin-top:10px;">
+                <label class="row deploy-switch" style="margin-top:10px;">
                   <input type="checkbox" data-agent-toggle="${agent.id}" ${checked} ${dead ? "disabled" : ""} />
-                  <span>${dead ? "离线" : "部署"}</span>
+                  <span>${dead ? "离线" : "部署到小队"}</span>
                 </label>
               </article>
             `;
@@ -1741,6 +2342,11 @@ function renderBattle() {
   const intentTarget = getLikelyIntentTarget(enemy.intent.id);
   const intentForecast = getIntentForecast(enemy);
   const intentThreatClass = `intent-${enemy.intent.threat || "medium"}`;
+  const intentIcon = getIntentIcon(enemy.intent.id);
+  const activeNodeOperationVisual = activeNodeOperation
+    ? getNodeOperationVisual(activeNodeOperation.id)
+    : null;
+  const enemyVisual = getEnemyVisual(enemy.id);
 
   const enemyStatusTags = [];
   if (enemy.armor > 0) {
@@ -1757,47 +2363,70 @@ function renderBattle() {
   }
 
   screenRoot.innerHTML = `
-    <section>
+    <section class="battle-screen">
       <div class="row spread">
         <h2 class="screen-title">节点 ${state.run.nodeIndex + 1} - ${node ? node.label : "战斗"}</h2>
         <small>回合 ${state.battle.turn}</small>
       </div>
+      ${renderStageProgress(state.run.nodeIndex, state.run.nodeIndex)}
 
       ${
         activeNodeOperation
-          ? `<p class="muted"><strong>生效中的节点协议：</strong>${activeNodeOperation.title}</p>`
+          ? `
+            <article class="panel panel-visual active-protocol">
+              <div class="row">
+                ${renderProtocolGlyph(activeNodeOperation.id)}
+                <div>
+                  <h3>生效协议：${activeNodeOperation.title}</h3>
+                  <p class="muted">${activeNodeOperationVisual ? activeNodeOperationVisual.tone : "节点修正中"}</p>
+                </div>
+              </div>
+            </article>
+          `
           : ""
       }
 
-      <article class="intent-card">
-        <h3>敌方意图：${enemy.intent.label}</h3>
+      <article class="intent-card panel-visual">
+        <div class="row spread">
+          <h3>敌方意图：${enemy.intent.label}</h3>
+          <span class="intent-icon-badge">${intentIcon}</span>
+        </div>
         <p>${enemy.intent.desc}</p>
         <div class="chip-row">
           <span class="chip ${intentThreatClass}">威胁 ${getThreatLabel(enemy.intent.threat || "medium")}</span>
           <span class="chip">可能目标：${intentTarget}</span>
           <span class="chip">效果预估：${intentForecast}</span>
         </div>
+        ${renderIntentSequenceTrack(enemy, 4)}
       </article>
 
       ${renderBossBattleReadout(enemy)}
 
-      <div class="card-grid" style="margin-bottom:10px;">
+      <div class="card-grid battle-grid" style="margin-bottom:10px;">
         ${squad
           .map((agent) => {
             const selected = state.battle.selectedActorId === agent.id;
             const statusTags = formatAgentStatus(agent);
+            const roleVisual = getRoleVisual(agent.role);
 
             return `
-              <article class="card ${selected ? "selected" : ""}">
-                <h3>${agent.name}</h3>
-                <p>${getRoleLabel(agent.role)}</p>
+              <article class="card unit-card agent-card role-${agent.role.toLowerCase()} ${selected ? "selected" : ""}" style="--role-accent:${roleVisual.color};">
+                <div class="unit-head">
+                  ${renderAgentPortrait(agent)}
+                  <div class="unit-head-copy">
+                    <h3>${agent.name}</h3>
+                    <p>${getRoleLabel(agent.role)}</p>
+                    <span class="mini-badge" style="--badge-accent:${roleVisual.color}">${roleVisual.icon}</span>
+                  </div>
+                </div>
                 <div class="stat-row">
                   <span class="stat-pill">生命 ${agent.hp}/${agent.hpMax}</span>
                   <span class="stat-pill">攻击 ${agent.atk}</span>
                   <span class="stat-pill">能量 ${agent.energy}</span>
                 </div>
                 ${renderHpBar(agent.hp, agent.hpMax, "ally")}
-                ${statusTags.length > 0 ? `<div class="chip-row" style="margin-top:8px;">${statusTags
+                ${renderEnergyCells(agent.energy)}
+                ${statusTags.length > 0 ? `<div class="chip-row">${statusTags
                   .map((tag) => `<span class="chip">${tag}</span>`)
                   .join("")}</div>` : '<p class="muted" style="margin-top:8px;">当前无状态效果。</p>'}
                 <p class="muted" style="margin-top:8px;">${agent.skill.title}: ${agent.skill.desc}</p>
@@ -1809,15 +2438,20 @@ function renderBattle() {
           })
           .join("")}
 
-        <article class="card enemy-card">
-          <h3>${enemy.name}</h3>
-          <p>${enemy.role}</p>
+        <article class="card enemy-card unit-card" style="--enemy-accent:${enemyVisual.color};">
+          <div class="unit-head enemy-head">
+            ${renderEnemyPortrait(enemy)}
+            <div class="unit-head-copy">
+              <h3>${enemy.name}</h3>
+              <p>${enemy.role}</p>
+            </div>
+          </div>
           <div class="stat-row">
             <span class="stat-pill">生命 ${enemy.hp}/${enemy.hpMax}</span>
             <span class="stat-pill">攻击 ${enemy.atk}</span>
           </div>
           ${renderHpBar(enemy.hp, enemy.hpMax, "enemy")}
-          ${enemyStatusTags.length > 0 ? `<div class="chip-row" style="margin-top:8px;">${enemyStatusTags
+          ${enemyStatusTags.length > 0 ? `<div class="chip-row">${enemyStatusTags
             .map((tag) => `<span class="chip">${tag}</span>`)
             .join("")}</div>` : '<p class="muted" style="margin-top:8px;">敌方当前无额外修正。</p>'}
           ${
@@ -1833,6 +2467,22 @@ function renderBattle() {
           ? `
         <article class="panel combat-summary" style="margin-bottom:10px;">
           <h3>第 ${state.battle.lastResolution.turn} 回合复盘</h3>
+          <div class="impact-grid">
+            <div>
+              <small class="muted">我方输出</small>
+              ${renderImpactBar(state.battle.lastResolution.playerDamage, "ally")}
+            </div>
+            <div>
+              <small class="muted">敌方压制</small>
+              ${renderImpactBar(state.battle.lastResolution.enemyDamage, "enemy")}
+            </div>
+          </div>
+          <div class="chip-row">
+            <span class="chip ${`intent-${state.battle.lastResolution.intentThreat || "medium"}`}">
+              敌方威胁 ${getThreatLabel(state.battle.lastResolution.intentThreat || "medium")}
+            </span>
+            <span class="chip">行动：${state.battle.lastResolution.actionLabel || "常规行动"}</span>
+          </div>
           <p>${state.battle.lastResolution.player}</p>
           <p>${state.battle.lastResolution.enemy}</p>
         </article>
@@ -1860,26 +2510,49 @@ function renderReward() {
   if (!state.run) {
     return;
   }
+  const nextNode = NODE_PLAN[state.run.nodeIndex + 1] || null;
 
   screenRoot.innerHTML = `
-    <section>
-      <h2 class="screen-title">指令奖励</h2>
-      <p>进入节点 ${state.run.nodeIndex + 2} 前，选择一项升级。</p>
+    <section class="reward-screen">
+      <article class="panel panel-visual reward-intro">
+        <div class="row spread">
+          <h2 class="screen-title">指令奖励</h2>
+          <div class="row">
+            <span class="chip">下一节点 ${state.run.nodeIndex + 2}/${state.run.maxNode}</span>
+            ${renderStageBadge(nextNode ? nextNode.danger : null, "终局")}
+          </div>
+        </div>
+        <p>进入下一节点前，选择并安装一项升级指令。</p>
+        ${renderStageProgress(state.run.nodeIndex + 1, state.run.nodeIndex + 1)}
+      </article>
       <div class="reward-grid">
         ${state.pendingRewards
-          .map(
-            (reward) => `
-              <article class="card">
-                <h3>${reward.title}</h3>
+          .map((reward) => {
+            const visual = getRewardVisual(reward.id);
+            return `
+              <article class="card reward-card panel-visual" style="--reward-accent:${visual.color};">
+                <div class="reward-head">
+                  ${renderRewardGlyph(reward.id)}
+                  <div>
+                    <h3>${reward.title}</h3>
+                    <p class="muted">${visual.tone}</p>
+                  </div>
+                </div>
                 <p>${reward.desc}</p>
+                <div class="chip-row">
+                  <span class="chip">${visual.badge}</span>
+                  <span class="chip">${reward.persistent ? "可带入后续节点" : "即时生效"}</span>
+                </div>
                 <button class="btn primary" data-action="pick-reward" data-reward-id="${reward.id}">安装</button>
               </article>
             `
-          )
+          })
           .join("")}
       </div>
-      <h3 style="margin-top:14px;">当前指令</h3>
-      ${renderDirectiveList()}
+      <article class="panel panel-visual">
+        <h3>当前指令栈</h3>
+        ${renderDirectiveList()}
+      </article>
     </section>
   `;
 }
@@ -1909,17 +2582,44 @@ function renderRunEnd() {
     : state.run
       ? state.run.nodeIndex
       : 0;
+  const survivorCount = state.run ? state.run.roster.filter((agent) => agent.hp > 0).length : 0;
+  const totalAgents = state.run ? state.run.roster.length : CONFIG.maxSquadSize;
+  const installedCount = state.run ? Object.keys(state.run.rewardTally).length : 0;
+  const actionScore = Math.max(
+    0,
+    clearedNodes * 12 + survivorCount * 6 + installedCount * 4 + (isWin ? 20 : 0)
+  );
 
   screenRoot.innerHTML = `
-    <section>
-      <h2 class="screen-title">${title}</h2>
-      <p>${subtitle}</p>
-      <p class="muted">已通关节点：${clearedNodes}/${state.run ? state.run.maxNode : NODE_PLAN.length}</p>
+    <section class="run-end-screen">
+      <article class="panel panel-visual end-hero ${isWin ? "success" : "failure"}">
+        <div class="row spread">
+          <h2 class="screen-title">${title}</h2>
+          <span class="chip ${isWin ? "result-success" : "result-failure"}">${isWin ? "任务完成" : "任务中断"}</span>
+        </div>
+        <p>${subtitle}</p>
+        <div class="end-stat-grid">
+          <div class="end-stat-card">
+            <small class="muted">已通关节点</small>
+            <strong>${clearedNodes}/${state.run ? state.run.maxNode : NODE_PLAN.length}</strong>
+          </div>
+          <div class="end-stat-card">
+            <small class="muted">存活特工</small>
+            <strong>${survivorCount}/${totalAgents}</strong>
+          </div>
+          <div class="end-stat-card">
+            <small class="muted">战术评分</small>
+            <strong>${actionScore}</strong>
+          </div>
+        </div>
+      </article>
 
-      <h3>已安装指令</h3>
-      <ul>${directives}</ul>
+      <article class="panel panel-visual">
+        <h3>已安装指令</h3>
+        <ul>${directives}</ul>
+      </article>
 
-      <div class="row" style="margin-top:12px;">
+      <div class="row" style="margin-top:4px;">
         <button class="btn primary" data-action="start-run">开始新行动</button>
         <button class="btn" data-action="to-title">返回标题</button>
       </div>
