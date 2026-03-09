@@ -459,6 +459,38 @@ const BATTLE_EFFECT_LABELS = {
   defeat: "离线",
 };
 
+const BATTLE_EFFECT_DURATION_MS = {
+  attack: 440,
+  hit: 340,
+  heal: 520,
+  shield: 500,
+  "phase-shift": 620,
+  defeat: 880,
+};
+
+const BATTLE_ARENA_EFFECT_DURATION_MS = {
+  impact: 280,
+  "phase-shift": 560,
+  "threat-surge": 620,
+};
+
+const BATTLE_FLOAT_DURATION_MS = {
+  attack: 760,
+  damage: 980,
+  heal: 1040,
+  shield: 1080,
+  phase: 1240,
+  defeat: 1320,
+};
+
+const BATTLE_FLOAT_STAGGER_MS = 110;
+const BATTLE_FLOAT_X_OFFSETS = [0, -14, 14, -22, 22];
+
+const BOSS_THREAT_FEEDBACK_TEXT = {
+  high: "威胁升高",
+  extreme: "致命威胁",
+};
+
 const NODE_OPERATION_VISUALS = {
   "overclock-surge": {
     style: "overclock",
@@ -799,7 +831,138 @@ function createBattleFxState() {
     arenaEffects: [],
     floatingTexts: [],
     nextTextId: 1,
+    nextEffectId: 1,
+    cleanupTimerId: null,
   };
+}
+
+function clearBattleFxTimer(fxState) {
+  if (fxState && fxState.cleanupTimerId) {
+    window.clearTimeout(fxState.cleanupTimerId);
+    fxState.cleanupTimerId = null;
+  }
+}
+
+function clearCurrentBattleFx() {
+  if (!state.battle || !state.battle.fx) {
+    return;
+  }
+  clearBattleFxTimer(state.battle.fx);
+}
+
+function getBattleEffectDuration(effect) {
+  return BATTLE_EFFECT_DURATION_MS[effect] || 420;
+}
+
+function getBattleArenaEffectDuration(effect) {
+  return BATTLE_ARENA_EFFECT_DURATION_MS[effect] || 420;
+}
+
+function getBattleFloatingTextDuration(kind) {
+  return BATTLE_FLOAT_DURATION_MS[kind] || 960;
+}
+
+function filterActiveFxEntries(entries, now = Date.now()) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return [];
+  }
+  return entries.filter((entry) => entry && entry.expiresAt > now);
+}
+
+function pruneBattleFxState(fxState, now = Date.now()) {
+  if (!fxState) {
+    return;
+  }
+
+  Object.keys(fxState.allyEffects).forEach((agentId) => {
+    const activeEntries = filterActiveFxEntries(fxState.allyEffects[agentId], now);
+    if (activeEntries.length > 0) {
+      fxState.allyEffects[agentId] = activeEntries;
+      return;
+    }
+    delete fxState.allyEffects[agentId];
+  });
+
+  fxState.enemyEffects = filterActiveFxEntries(fxState.enemyEffects, now);
+  fxState.arenaEffects = filterActiveFxEntries(fxState.arenaEffects, now);
+  fxState.floatingTexts = filterActiveFxEntries(fxState.floatingTexts, now);
+}
+
+function getBattleFxNextExpiry(fxState, now = Date.now()) {
+  let nextExpiry = Infinity;
+
+  const inspectEntries = (entries) => {
+    entries.forEach((entry) => {
+      if (entry.expiresAt > now && entry.expiresAt < nextExpiry) {
+        nextExpiry = entry.expiresAt;
+      }
+    });
+  };
+
+  Object.values(fxState.allyEffects).forEach((entries) => inspectEntries(entries));
+  inspectEntries(fxState.enemyEffects);
+  inspectEntries(fxState.arenaEffects);
+  inspectEntries(fxState.floatingTexts);
+  return nextExpiry;
+}
+
+function scheduleBattleFxCleanup() {
+  if (!state.battle || !state.battle.fx) {
+    return;
+  }
+
+  const fxState = state.battle.fx;
+  pruneBattleFxState(fxState);
+  clearBattleFxTimer(fxState);
+  const nextExpiry = getBattleFxNextExpiry(fxState);
+  if (!Number.isFinite(nextExpiry)) {
+    return;
+  }
+
+  const delay = Math.max(24, nextExpiry - Date.now() + 20);
+  fxState.cleanupTimerId = window.setTimeout(() => {
+    if (!state.battle || state.battle.fx !== fxState) {
+      return;
+    }
+    fxState.cleanupTimerId = null;
+    pruneBattleFxState(fxState);
+    if (state.screen === "battle") {
+      render();
+    }
+    scheduleBattleFxCleanup();
+  }, delay);
+}
+
+function upsertBattleEffect(entries, effect, now, expiresAt, fxState) {
+  const existing = entries.find((entry) => entry.effect === effect);
+  if (existing) {
+    existing.createdAt = now;
+    existing.expiresAt = expiresAt;
+    return;
+  }
+
+  entries.push({
+    id: fxState.nextEffectId,
+    effect,
+    createdAt: now,
+    expiresAt,
+  });
+  fxState.nextEffectId += 1;
+}
+
+function getUniqueEffectNames(entries, order = "asc") {
+  const sorted = [...entries].sort((a, b) =>
+    order === "desc" ? b.createdAt - a.createdAt : a.createdAt - b.createdAt
+  );
+  const seen = new Set();
+  const names = [];
+  sorted.forEach((entry) => {
+    if (!seen.has(entry.effect)) {
+      seen.add(entry.effect);
+      names.push(entry.effect);
+    }
+  });
+  return names;
 }
 
 function ensureBattleFx() {
@@ -817,6 +980,7 @@ function resetBattleFx() {
   if (!state.battle) {
     return;
   }
+  clearCurrentBattleFx();
   state.battle.fx = createBattleFxState();
 }
 
@@ -826,10 +990,13 @@ function addBattleUnitEffect(side, targetId, effect) {
     return;
   }
 
+  const now = Date.now();
+  const expiresAt = now + getBattleEffectDuration(effect);
+
   if (side === "enemy") {
-    if (!fx.enemyEffects.includes(effect)) {
-      fx.enemyEffects.push(effect);
-    }
+    fx.enemyEffects = filterActiveFxEntries(fx.enemyEffects, now);
+    upsertBattleEffect(fx.enemyEffects, effect, now, expiresAt, fx);
+    scheduleBattleFxCleanup();
     return;
   }
 
@@ -840,9 +1007,9 @@ function addBattleUnitEffect(side, targetId, effect) {
   if (!fx.allyEffects[targetId]) {
     fx.allyEffects[targetId] = [];
   }
-  if (!fx.allyEffects[targetId].includes(effect)) {
-    fx.allyEffects[targetId].push(effect);
-  }
+  fx.allyEffects[targetId] = filterActiveFxEntries(fx.allyEffects[targetId], now);
+  upsertBattleEffect(fx.allyEffects[targetId], effect, now, expiresAt, fx);
+  scheduleBattleFxCleanup();
 }
 
 function addBattleArenaEffect(effect) {
@@ -850,9 +1017,12 @@ function addBattleArenaEffect(effect) {
   if (!fx || !effect) {
     return;
   }
-  if (!fx.arenaEffects.includes(effect)) {
-    fx.arenaEffects.push(effect);
-  }
+
+  const now = Date.now();
+  const expiresAt = now + getBattleArenaEffectDuration(effect);
+  fx.arenaEffects = filterActiveFxEntries(fx.arenaEffects, now);
+  upsertBattleEffect(fx.arenaEffects, effect, now, expiresAt, fx);
+  scheduleBattleFxCleanup();
 }
 
 function addBattleFloatingText(side, targetId, kind, amount, customText = "") {
@@ -880,7 +1050,22 @@ function addBattleFloatingText(side, targetId, kind, amount, customText = "") {
     if (kind === "shield") {
       text = `护盾 +${value}`;
     }
+    if (kind === "phase") {
+      text = "相位切换";
+    }
   }
+
+  if (!text) {
+    return;
+  }
+
+  const now = Date.now();
+  pruneBattleFxState(fx, now);
+  const activeOnTarget = fx.floatingTexts.filter(
+    (entry) => entry.side === side && entry.targetId === targetId && entry.expiresAt > now
+  ).length;
+  const delayMs = Math.min(320, activeOnTarget * BATTLE_FLOAT_STAGGER_MS);
+  const durationMs = getBattleFloatingTextDuration(kind);
 
   fx.floatingTexts.push({
     id: fx.nextTextId,
@@ -888,8 +1073,14 @@ function addBattleFloatingText(side, targetId, kind, amount, customText = "") {
     targetId,
     kind,
     text,
+    delayMs,
+    durationMs,
+    offsetX: BATTLE_FLOAT_X_OFFSETS[activeOnTarget % BATTLE_FLOAT_X_OFFSETS.length],
+    createdAt: now,
+    expiresAt: now + delayMs + durationMs + 80,
   });
   fx.nextTextId += 1;
+  scheduleBattleFxCleanup();
 }
 
 function addBattleAttackCue(side, targetId, customText = "进攻") {
@@ -897,13 +1088,21 @@ function addBattleAttackCue(side, targetId, customText = "进攻") {
   addBattleFloatingText(side, targetId, "attack", 0, customText);
 }
 
-function getBattleUnitEffects(side, targetId) {
+function getBattleUnitEffectEntries(side, targetId, now = Date.now()) {
   if (!state.battle || !state.battle.fx) {
     return [];
   }
-  return side === "enemy"
-    ? state.battle.fx.enemyEffects
-    : state.battle.fx.allyEffects[targetId] || [];
+
+  const fxState = state.battle.fx;
+  if (side === "enemy") {
+    return filterActiveFxEntries(fxState.enemyEffects, now);
+  }
+  return filterActiveFxEntries(fxState.allyEffects[targetId] || [], now);
+}
+
+function getBattleUnitEffects(side, targetId) {
+  const entries = getBattleUnitEffectEntries(side, targetId);
+  return getUniqueEffectNames(entries, "asc");
 }
 
 function getBattleUnitFxClass(side, targetId) {
@@ -915,7 +1114,10 @@ function getBattleArenaFxClass() {
   if (!state.battle || !state.battle.fx) {
     return "";
   }
-  return state.battle.fx.arenaEffects.map((effect) => `fx-arena-${effect}`).join(" ");
+  const entries = filterActiveFxEntries(state.battle.fx.arenaEffects);
+  return getUniqueEffectNames(entries, "asc")
+    .map((effect) => `fx-arena-${effect}`)
+    .join(" ");
 }
 
 function renderBattleFloatingTexts(side, targetId) {
@@ -923,9 +1125,10 @@ function renderBattleFloatingTexts(side, targetId) {
     return "";
   }
 
-  const items = state.battle.fx.floatingTexts.filter(
-    (entry) => entry.side === side && entry.targetId === targetId
-  );
+  const now = Date.now();
+  const items = filterActiveFxEntries(state.battle.fx.floatingTexts, now)
+    .filter((entry) => entry.side === side && entry.targetId === targetId)
+    .slice(-4);
   if (items.length === 0) {
     return "";
   }
@@ -935,7 +1138,7 @@ function renderBattleFloatingTexts(side, targetId) {
       ${items
         .map(
           (entry, index) =>
-            `<span class="floating-text kind-${entry.kind}" style="--float-index:${index};">${entry.text}</span>`
+            `<span class="floating-text kind-${entry.kind}" style="--float-index:${index}; --float-delay:${entry.delayMs}ms; --float-duration:${entry.durationMs}ms; --float-x:${entry.offsetX}px;">${entry.text}</span>`
         )
         .join("")}
     </div>
@@ -950,7 +1153,8 @@ function getBattleEffectTagText(effect, side) {
 }
 
 function renderBattleEffectTags(side, targetId) {
-  const effects = getBattleUnitEffects(side, targetId);
+  const entries = getBattleUnitEffectEntries(side, targetId);
+  const effects = getUniqueEffectNames(entries, "desc").slice(0, 2).reverse();
   if (effects.length === 0) {
     return "";
   }
@@ -1055,6 +1259,7 @@ function selectNodeOperation(operationId) {
 function startRun() {
   state.run = createRun();
   ensureNodeOperationPlan(0);
+  clearCurrentBattleFx();
   state.battle = null;
   state.pendingRewards = [];
   state.runResult = null;
@@ -1067,6 +1272,7 @@ function startRun() {
 function abortRun() {
   state.screen = "title";
   state.run = null;
+  clearCurrentBattleFx();
   state.battle = null;
   state.pendingRewards = [];
   state.runResult = null;
@@ -1145,6 +1351,27 @@ function buildEnemy() {
   return enemy;
 }
 
+function applyBossThreatFeedback(enemy) {
+  if (!state.battle || !enemy || !enemy.bossState || !enemy.intent) {
+    return;
+  }
+
+  const threat = enemy.intent.threat || "medium";
+  const cueText = BOSS_THREAT_FEEDBACK_TEXT[threat];
+  if (!cueText) {
+    state.battle.lastBossThreatCue = "";
+    return;
+  }
+
+  const signature = `${enemy.bossState.phase}-${threat}`;
+  if (state.battle.lastBossThreatCue === signature) {
+    return;
+  }
+  state.battle.lastBossThreatCue = signature;
+  addBattleArenaEffect("threat-surge");
+  addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "phase", 0, cueText);
+}
+
 function queueEnemyIntent(enemy) {
   const intentId = enemy.pattern[enemy.patternIndex % enemy.pattern.length];
   enemy.patternIndex += 1;
@@ -1159,6 +1386,10 @@ function queueEnemyIntent(enemy) {
     desc: meta.desc,
     threat: meta.threat,
   };
+
+  if (state.battle && state.battle.enemy === enemy) {
+    applyBossThreatFeedback(enemy);
+  }
 }
 
 function handleBossPhaseShift(enemy) {
@@ -1293,6 +1524,7 @@ function deployBattle() {
     nodeOperationId: selectedOperation ? selectedOperation.id : null,
     lastResolution: null,
     pendingFinish: false,
+    lastBossThreatCue: "",
     fx: createBattleFxState(),
   };
   state.screen = "battle";
@@ -1301,6 +1533,7 @@ function deployBattle() {
     addBattleArenaEffect("phase-shift");
     addBattleUnitEffect("enemy", ENEMY_STAGE_TARGET_ID, "phase-shift");
     addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "phase", 0, "主核接入");
+    applyBossThreatFeedback(enemy);
     addLog(`${enemy.name}展开主核压制场，战斗压力提升。`);
   }
 
@@ -1988,6 +2221,7 @@ function applyPostBattleRecovery() {
 function endRun(result, reason) {
   state.runResult = result;
   state.screen = "run-end";
+  clearCurrentBattleFx();
   state.battle = null;
 
   if (reason) {
@@ -2017,6 +2251,7 @@ function onBattleWin() {
 
   state.pendingRewards = getRewardChoices();
   state.screen = "reward";
+  clearCurrentBattleFx();
   state.battle = null;
   addLog("遭遇战已清除，请选择一项指令奖励。");
   render();
