@@ -303,6 +303,7 @@ const state = {
   run: null,
   battle: null,
   pendingRewards: [],
+  lastBattleResult: null,
   runResult: null,
   log: ["系统待机中，等待协议启动。"],
 };
@@ -487,6 +488,7 @@ const BATTLE_ARENA_EFFECT_DURATION_MS = {
   "turn-shift": 620,
   "phase-shift": 620,
   "threat-surge": 700,
+  "victory-pulse": 760,
 };
 
 const BATTLE_FLOAT_DURATION_MS = {
@@ -504,6 +506,9 @@ const BATTLE_FLOAT_X_OFFSETS = [0, -14, 14, -22, 22];
 const BATTLE_DECISION_LOCK_MS = 340;
 const BATTLE_DECISION_READY_MS = 560;
 const BATTLE_ACTION_RECENT_MS = 780;
+const BATTLE_VICTORY_COLLAPSE_MS = 380;
+const BATTLE_VICTORY_HANDOFF_MS = 700;
+const REWARD_REVEAL_STAGGER_MS = 120;
 const BATTLE_FLOAT_LABELS = {
   attack: "行动",
   damage: "受击",
@@ -905,6 +910,10 @@ function clearBattleFlowTimers(battleState = state.battle) {
   if (battleState.decisionReadyTimerId) {
     window.clearTimeout(battleState.decisionReadyTimerId);
     battleState.decisionReadyTimerId = null;
+  }
+  if (battleState.finishTimerId) {
+    window.clearTimeout(battleState.finishTimerId);
+    battleState.finishTimerId = null;
   }
 }
 
@@ -1458,6 +1467,7 @@ function startRun() {
   clearCurrentBattleFx();
   state.battle = null;
   state.pendingRewards = [];
+  state.lastBattleResult = null;
   state.runResult = null;
   state.screen = "squad";
   state.log = [];
@@ -1471,6 +1481,7 @@ function abortRun() {
   clearCurrentBattleFx();
   state.battle = null;
   state.pendingRewards = [];
+  state.lastBattleResult = null;
   state.runResult = null;
   state.log = ["协议已重置，等待新的行动。"];
   render();
@@ -1723,13 +1734,16 @@ function deployBattle() {
     lastActionType: "",
     lastActionUntil: 0,
     pendingFinish: false,
+    finishPhase: "",
     decisionLockUntil: 0,
     decisionReadyUntil: 0,
     decisionUnlockTimerId: null,
     decisionReadyTimerId: null,
+    finishTimerId: null,
     lastBossThreatCue: "",
     fx: createBattleFxState(),
   };
+  state.lastBattleResult = null;
   state.screen = "battle";
   addBattleArenaEffect("turn-shift");
 
@@ -1921,6 +1935,25 @@ function getTotalSquadHp() {
   }
 
   return getAliveAgents(state.run.squadIds).reduce((total, agent) => total + agent.hp, 0);
+}
+
+function getPostBattleRecoveryPreview() {
+  if (!state.run) {
+    return 0;
+  }
+
+  const healAmount = state.run.mods.postBattleHeal;
+  if (healAmount <= 0) {
+    return 0;
+  }
+
+  return state.run.roster.reduce((total, agent) => {
+    if (agent.hp <= 0) {
+      return total;
+    }
+    const recovered = Math.min(agent.hpMax, agent.hp + healAmount) - agent.hp;
+    return total + recovered;
+  }, 0);
 }
 
 function formatDamageRange(minValue, maxValue) {
@@ -2298,6 +2331,57 @@ function getActionLabel(actionType, actor) {
   return "行动";
 }
 
+function beginBattleVictoryFlow(actor, actionLabel, playerDamage) {
+  if (!state.battle) {
+    return;
+  }
+
+  const battleState = state.battle;
+  clearBattleFlowTimers(battleState);
+  battleState.lastResolution = {
+    turn: battleState.turn,
+    actionLabel,
+    player: `${actor.name}使用${actionLabel}造成 ${playerDamage} 点伤害。`,
+    enemy: `${battleState.enemy.name}在敌方行动前已崩解。`,
+    playerDamage,
+    enemyDamage: 0,
+    intentThreat: "low",
+  };
+  battleState.pendingFinish = true;
+  battleState.finishPhase = "collapse";
+  battleState.decisionLockUntil = 0;
+  battleState.decisionReadyUntil = 0;
+  addBattleArenaEffect("victory-pulse");
+  addBattleFloatingText("enemy", ENEMY_STAGE_TARGET_ID, "phase", 0, "节点清除");
+  addLog(`${battleState.enemy.name}已崩解，战场控制权已夺取。`);
+  render();
+
+  const transitionPayload = {
+    actorName: actor.name,
+    actionLabel,
+    playerDamage,
+    turn: battleState.turn,
+  };
+
+  battleState.finishTimerId = window.setTimeout(() => {
+    if (state.screen !== "battle" || state.battle !== battleState || battleState.enemy.hp > 0) {
+      return;
+    }
+    battleState.finishTimerId = null;
+    battleState.finishPhase = "handoff";
+    addBattleArenaEffect("turn-shift");
+    render();
+
+    battleState.finishTimerId = window.setTimeout(() => {
+      if (state.screen !== "battle" || state.battle !== battleState || battleState.enemy.hp > 0) {
+        return;
+      }
+      battleState.finishTimerId = null;
+      onBattleWin(transitionPayload);
+    }, BATTLE_VICTORY_HANDOFF_MS);
+  }, BATTLE_VICTORY_COLLAPSE_MS);
+}
+
 function performAction(actionType) {
   if (!state.run || !state.battle) {
     return;
@@ -2387,26 +2471,7 @@ function performAction(actionType) {
   const playerDamage = Math.max(0, enemyHpBeforeAction - state.battle.enemy.hp);
 
   if (state.battle.enemy.hp <= 0) {
-    state.battle.lastResolution = {
-      turn: state.battle.turn,
-      actionLabel,
-      player: `${actor.name}使用${actionLabel}造成 ${playerDamage} 点伤害。`,
-      enemy: `${state.battle.enemy.name}在敌方行动前已崩解。`,
-      playerDamage,
-      enemyDamage: 0,
-      intentThreat: "low",
-    };
-    addLog(`${state.battle.enemy.name}已崩解。`);
-    state.battle.pendingFinish = true;
-    render();
-    window.setTimeout(() => {
-      if (state.screen !== "battle" || !state.battle) {
-        return;
-      }
-      if (state.battle.enemy.hp <= 0) {
-        onBattleWin();
-      }
-    }, 520);
+    beginBattleVictoryFlow(actor, actionLabel, playerDamage);
     return;
   }
 
@@ -2440,12 +2505,12 @@ function performAction(actionType) {
 
 function applyPostBattleRecovery() {
   if (!state.run) {
-    return;
+    return 0;
   }
 
   const healAmount = state.run.mods.postBattleHeal;
   if (healAmount <= 0) {
-    return;
+    return 0;
   }
 
   let totalRecovered = 0;
@@ -2461,6 +2526,7 @@ function applyPostBattleRecovery() {
   if (totalRecovered > 0) {
     addLog(`自动修复共为小队恢复了 ${totalRecovered} 点生命。`);
   }
+  return totalRecovered;
 }
 
 function endRun(result, reason) {
@@ -2482,12 +2548,34 @@ function endRun(result, reason) {
   render();
 }
 
-function onBattleWin() {
-  if (!state.run) {
+function onBattleWin(victoryPayload = null) {
+  if (!state.run || !state.battle) {
     return;
   }
 
-  applyPostBattleRecovery();
+  const node = getCurrentNode();
+  const battleState = state.battle;
+  const recoveredHp = applyPostBattleRecovery();
+  state.lastBattleResult = {
+    nodeIndex: state.run.nodeIndex + 1,
+    nodeLabel: node ? node.label : `节点 ${state.run.nodeIndex + 1}`,
+    enemyName: battleState.enemy.name,
+    turn: victoryPayload && victoryPayload.turn ? victoryPayload.turn : battleState.turn,
+    actionLabel:
+      victoryPayload && victoryPayload.actionLabel
+        ? victoryPayload.actionLabel
+        : battleState.lastResolution
+          ? battleState.lastResolution.actionLabel
+          : "常规行动",
+    actorName: victoryPayload && victoryPayload.actorName ? victoryPayload.actorName : "",
+    playerDamage:
+      victoryPayload && Number.isFinite(victoryPayload.playerDamage)
+        ? victoryPayload.playerDamage
+        : battleState.lastResolution
+          ? battleState.lastResolution.playerDamage
+          : 0,
+    recoveredHp,
+  };
 
   if (state.run.nodeIndex >= state.run.maxNode - 1) {
     endRun("victory");
@@ -2525,6 +2613,7 @@ function applyReward(rewardId) {
   addLog(`已安装指令：${reward.title}。`);
 
   state.pendingRewards = [];
+  state.lastBattleResult = null;
   state.run.nodeIndex += 1;
   ensureNodeOperationPlan(state.run.nodeIndex);
   ensureValidSquad();
@@ -3075,9 +3164,13 @@ function renderHeader() {
   const nodeNum = clamp(state.run.nodeIndex + 1, 1, state.run.maxNode);
   const node = getCurrentNode();
   const stageLabel =
-    state.screen === "run-end" || !node
+    state.screen === "run-end"
       ? "行动结束"
-      : `${getDangerLabel(node.danger)}：${node.label}`;
+      : state.screen === "reward"
+        ? "奖励结算"
+        : !node
+          ? "行动结束"
+          : `${getDangerLabel(node.danger)}：${node.label}`;
 
   runInfo.textContent = `节点 ${nodeNum}/${state.run.maxNode} | ${stageLabel} | 存活 ${aliveCount} | 指令 ${Object.keys(state.run.rewardTally).length}`;
 }
@@ -3266,20 +3359,37 @@ function renderBattle() {
   const decisionLocked = isBattleDecisionLocked(state.battle, now);
   const decisionReady = Boolean(state.battle.decisionReadyUntil && state.battle.decisionReadyUntil > now);
   const actionLocked = Boolean(state.battle.pendingFinish || decisionLocked);
-  const actionFlowClass = decisionLocked ? "is-resolving" : decisionReady ? "is-ready" : "";
+  const finishPhase = state.battle.finishPhase || "";
+  const actionFlowClass = state.battle.pendingFinish
+    ? "is-finishing"
+    : decisionLocked
+      ? "is-resolving"
+      : decisionReady
+        ? "is-ready"
+        : "";
   const skillCost = actor ? getSkillCost(actor) : 0;
   const skillDisabled = actionLocked || !actor || actor.energy < skillCost;
   const burstDisabled = actionLocked || !actor || actor.energy < 3;
   const skillActionLabel = actor ? `${actor.skill.title}（-${skillCost} 能量）` : "技能";
   const isRecentAction = (type) =>
     Boolean(state.battle.lastActionType === type && state.battle.lastActionUntil > now);
+  const recoveryPreview = getPostBattleRecoveryPreview();
   const flowHint = state.battle.pendingFinish
-    ? "战斗结算中..."
+    ? finishPhase === "handoff"
+      ? "战场回收完成，正在接入指令奖励..."
+      : "目标崩解，正在确认节点控制权..."
     : decisionLocked
       ? "链路同步中..."
       : decisionReady
         ? "结算完成，可继续决策。"
         : "";
+  const battleFinishTitle = finishPhase === "handoff" ? "节点清除完成" : "目标崩解";
+  const battleFinishSubline =
+    finishPhase === "handoff" ? "结算完成，正在解码可用指令。" : "敌方主链路已断开，正在回收战场残留。";
+  const battleFinishAction =
+    state.battle.lastResolution && state.battle.lastResolution.actionLabel
+      ? state.battle.lastResolution.actionLabel
+      : "常规行动";
   const intentTarget = getLikelyIntentTarget(enemy.intent.id);
   const intentForecast = getIntentForecast(enemy);
   const intentThreatKey = enemy.intent.threat || "medium";
@@ -3454,6 +3564,26 @@ function renderBattle() {
           : ""
       }
 
+      ${
+        state.battle.pendingFinish
+          ? `
+        <article class="panel panel-visual battle-victory-bridge phase-${finishPhase || "collapse"}" style="margin-bottom:10px;">
+          <div class="row spread">
+            <h3>${battleFinishTitle}</h3>
+            <span class="chip battle-finish-chip">${enemy.name}</span>
+          </div>
+          <p>${battleFinishSubline}</p>
+          <div class="chip-row">
+            <span class="chip">回合 ${state.battle.turn}</span>
+            <span class="chip">终结动作：${battleFinishAction}</span>
+            <span class="chip">终结伤害 ${state.battle.lastResolution ? state.battle.lastResolution.playerDamage : 0}</span>
+            <span class="chip">${recoveryPreview > 0 ? `战后修复 +${recoveryPreview}` : "战后修复 0"}</span>
+          </div>
+        </article>
+      `
+          : ""
+      }
+
       <div class="actions ${actionFlowClass}">
         <button class="btn primary action-btn attack ${isRecentAction("attack") ? "recent" : ""}" data-action="do-attack" ${actionLocked ? "disabled" : ""}>攻击（+1 能量）</button>
         <button class="btn action-btn guard ${isRecentAction("defend") ? "recent" : ""}" data-action="do-defend" ${actionLocked ? "disabled" : ""}>防御（+1 能量）</button>
@@ -3474,6 +3604,7 @@ function renderReward() {
     return;
   }
   const nextNode = NODE_PLAN[state.run.nodeIndex + 1] || null;
+  const battleResult = state.lastBattleResult;
 
   screenRoot.innerHTML = `
     <section class="reward-screen">
@@ -3485,15 +3616,37 @@ function renderReward() {
             ${renderStageBadge(nextNode ? nextNode.danger : null, "终局")}
           </div>
         </div>
-        <p>进入下一节点前，选择并安装一项升级指令。</p>
+        <p>进入下一节点前，选择并安装一项升级指令。候选指令将按序解码。</p>
         ${renderStageProgress(state.run.nodeIndex + 1, state.run.nodeIndex + 1)}
       </article>
+      ${
+        battleResult
+          ? `
+      <article class="panel panel-visual reward-bridge">
+        <div class="row spread">
+          <h3>战场回执</h3>
+          <span class="chip">节点 ${battleResult.nodeIndex} · ${battleResult.nodeLabel}</span>
+        </div>
+        <p>${battleResult.enemyName} 已被清除，结算链路稳定。</p>
+        <div class="chip-row">
+          ${battleResult.actorName ? `<span class="chip">执行者 ${battleResult.actorName}</span>` : ""}
+          <span class="chip">终结动作：${battleResult.actionLabel}</span>
+          <span class="chip">终结伤害 ${battleResult.playerDamage}</span>
+          <span class="chip">战后修复 ${battleResult.recoveredHp > 0 ? `+${battleResult.recoveredHp}` : "0"}</span>
+        </div>
+      </article>
+      `
+          : ""
+      }
       <div class="reward-grid">
-        ${state.pendingRewards
-          .map((reward) => {
-            const visual = getRewardVisual(reward.id);
-            return `
-              <article class="card reward-card panel-visual" style="--reward-accent:${visual.color};">
+        ${
+          state.pendingRewards.length === 0
+            ? '<article class="panel panel-visual reward-empty"><p class="muted">当前没有可安装的奖励指令。</p></article>'
+            : state.pendingRewards
+                .map((reward, index) => {
+                  const visual = getRewardVisual(reward.id);
+                  return `
+              <article class="card reward-card panel-visual reward-reveal-card" style="--reward-accent:${visual.color}; --reward-reveal-delay:${index * REWARD_REVEAL_STAGGER_MS}ms;">
                 <div class="reward-head">
                   ${renderRewardGlyph(reward.id)}
                   <div>
@@ -3503,14 +3656,16 @@ function renderReward() {
                 </div>
                 <p>${reward.desc}</p>
                 <div class="chip-row">
+                  <span class="chip">序列 ${index + 1}</span>
                   <span class="chip">${visual.badge}</span>
                   <span class="chip">${reward.persistent ? "可带入后续节点" : "即时生效"}</span>
                 </div>
-                <button class="btn primary" data-action="pick-reward" data-reward-id="${reward.id}">安装</button>
+                <button class="btn primary" data-action="pick-reward" data-reward-id="${reward.id}">安装指令</button>
               </article>
-            `
-          })
-          .join("")}
+            `;
+                })
+                .join("")
+        }
       </div>
       <article class="panel panel-visual">
         <h3>当前指令栈</h3>
