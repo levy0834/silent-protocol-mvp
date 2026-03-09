@@ -318,6 +318,10 @@ const state = {
   onboarding: {
     firstRunGuidancePending: true,
   },
+  ui: {
+    lastRenderedScreen: "",
+    screenTransitionPending: false,
+  },
 };
 
 const screenRoot = document.getElementById("screen-root");
@@ -2833,7 +2837,44 @@ function onBattleWin(victoryPayload = null) {
   state.screen = "reward";
   clearCurrentBattleFx();
   state.battle = null;
-  addLog("遭遇战已清除，请选择一项指令奖励。", { phase: "reward", tone: "success" });
+  const clearedNodeLabel = node ? getDangerLabel(node.danger) : "节点战斗";
+  addLog(`${clearedNodeLabel}已清除，请选择一项指令奖励。`, {
+    phase: "reward",
+    tone: "success",
+  });
+  render();
+}
+
+function advanceToNextNode(rewardTitle = "", options = {}) {
+  if (!state.run) {
+    return;
+  }
+
+  const previousNodeNum = state.run.nodeIndex + 1;
+  const previousTransition = state.lastTransition;
+  state.pendingRewards = [];
+  state.lastBattleResult = null;
+  state.run.nodeIndex += 1;
+  const nextNodeNum = state.run.nodeIndex + 1;
+  state.lastTransition = {
+    fromNodeIndex: previousTransition ? previousTransition.fromNodeIndex : previousNodeNum,
+    fromNodeLabel: previousTransition ? previousTransition.fromNodeLabel : `节点 ${previousNodeNum}`,
+    enemyName: previousTransition ? previousTransition.enemyName : "上一节点目标",
+    actionLabel: previousTransition ? previousTransition.actionLabel : "常规行动",
+    recoveredHp: previousTransition ? previousTransition.recoveredHp : 0,
+    rewardTitle,
+    toNodeIndex: nextNodeNum,
+  };
+  ensureNodeOperationPlan(state.run.nodeIndex);
+  ensureValidSquad();
+  state.screen = "squad";
+  const nextNode = getCurrentNode();
+  if (nextNode) {
+    addLog(`${options.logPrefix || "链路推进至"}第 ${nextNodeNum} 节点：${nextNode.label}。`, {
+      phase: options.logPhase || "transition",
+      tone: options.logTone || "info",
+    });
+  }
   render();
 }
 
@@ -2858,33 +2899,22 @@ function applyReward(rewardId) {
   }
 
   addLog(`已安装指令：${reward.title}。`, { phase: "reward", tone: "success" });
+  advanceToNextNode(reward.title);
+}
 
-  const previousNodeNum = state.run.nodeIndex + 1;
-  const previousTransition = state.lastTransition;
-  state.pendingRewards = [];
-  state.lastBattleResult = null;
-  state.run.nodeIndex += 1;
-  const nextNodeNum = state.run.nodeIndex + 1;
-  state.lastTransition = {
-    fromNodeIndex: previousTransition ? previousTransition.fromNodeIndex : previousNodeNum,
-    fromNodeLabel: previousTransition ? previousTransition.fromNodeLabel : `节点 ${previousNodeNum}`,
-    enemyName: previousTransition ? previousTransition.enemyName : "上一节点目标",
-    actionLabel: previousTransition ? previousTransition.actionLabel : "常规行动",
-    recoveredHp: previousTransition ? previousTransition.recoveredHp : 0,
-    rewardTitle: reward.title,
-    toNodeIndex: nextNodeNum,
-  };
-  ensureNodeOperationPlan(state.run.nodeIndex);
-  ensureValidSquad();
-  state.screen = "squad";
-  const nextNode = getCurrentNode();
-  if (nextNode) {
-    addLog(`链路推进至第 ${nextNodeNum} 节点：${nextNode.label}。`, {
-      phase: "transition",
-      tone: "info",
-    });
+function continueWithoutReward() {
+  if (!state.run || state.screen !== "reward" || state.pendingRewards.length > 0) {
+    return;
   }
-  render();
+
+  addLog("当前未检测到可安装指令，已按基础配置推进下一节点。", {
+    phase: "reward",
+    tone: "warn",
+  });
+  advanceToNextNode("无可用指令", {
+    logPrefix: "链路按基础配置推进至",
+    logTone: "warn",
+  });
 }
 
 function formatAgentStatus(agent) {
@@ -2923,6 +2953,10 @@ function renderDirectiveList() {
       return count > 1 ? `${reward.title} ×${count}` : reward.title;
     })
     .filter(Boolean);
+
+  if (labels.length === 0) {
+    return '<p class="muted">暂无可识别的常驻指令记录。</p>';
+  }
 
   return `
     <div class="chip-row">
@@ -3312,7 +3346,7 @@ function renderOuterLoopRail(view, options = {}) {
 function renderFlowChain(fromNodeIndex, toNodeIndex, rewardTitle = "") {
   const fromNode = Math.max(1, fromNodeIndex || 1);
   const toNode = Math.max(fromNode, toNodeIndex || fromNode);
-  const rewardStep = rewardTitle ? `安装 ${rewardTitle}` : "选择节点奖励";
+  const rewardStep = rewardTitle ? `安装 ${rewardTitle}` : "选择指令奖励";
   const rewardClass = rewardTitle ? "complete" : "pending";
 
   return `
@@ -3324,6 +3358,11 @@ function renderFlowChain(fromNodeIndex, toNodeIndex, rewardTitle = "") {
       <span class="flow-step active">节点 ${toNode} 准备</span>
     </div>
   `;
+}
+
+function getScreenSectionClass(baseClass) {
+  const enterClass = state.ui && state.ui.screenTransitionPending ? "screen-enter" : "";
+  return enterClass ? `${baseClass} ${enterClass}` : baseClass;
 }
 
 function renderDeployChecklist(selectedOperation, deployedAliveCount, aliveCount, minRecommendedDeploy) {
@@ -3673,8 +3712,9 @@ function renderLog() {
 }
 
 function renderTitle() {
+  const screenClass = getScreenSectionClass("title-screen");
   screenRoot.innerHTML = `
-    <section class="title-screen">
+    <section class="${screenClass}">
       <article class="title-hero">
         <div class="title-copy">
           <h2 class="screen-title">寂静协议</h2>
@@ -3784,8 +3824,9 @@ function renderSquad() {
     squadNextActionTone = "warn";
   }
 
+  const screenClass = getScreenSectionClass("squad-screen");
   screenRoot.innerHTML = `
-    <section class="squad-screen">
+    <section class="${screenClass}">
       <div class="row spread">
         <h2 class="screen-title">小队编成</h2>
         <small>已选 ${state.run.squadIds.length}/${CONFIG.maxSquadSize}</small>
@@ -3872,7 +3913,7 @@ function renderSquad() {
             ${
               transitionDigest.rewardTitle
                 ? `<span class="chip operation-chip-ready">已安装：${transitionDigest.rewardTitle}</span>`
-                : '<span class="chip operation-chip-pending">待安装节点奖励</span>'
+                : '<span class="chip operation-chip-pending">待安装指令奖励</span>'
             }
           </div>
         </article>
@@ -3990,6 +4031,7 @@ function renderBattle() {
         ? "is-ready"
         : "";
   const skillCost = actor ? getSkillCost(actor) : 0;
+  const basicActionDisabled = actionLocked || !actor;
   const skillDisabled = actionLocked || !actor || actor.energy < skillCost;
   const burstDisabled = actionLocked || !actor || actor.energy < 3;
   const skillActionLabel = actor ? `${actor.skill.title}（-${skillCost} 能量）` : "技能";
@@ -4004,6 +4046,8 @@ function renderBattle() {
       ? "链路同步中..."
       : decisionReady
         ? "结算完成，可继续决策。"
+        : !actor
+          ? "当前无可操控特工，操作已锁定。"
         : "";
   const battleFinishTitle = finishPhase === "handoff" ? "节点清除完成" : "目标崩解";
   const battleFinishSubline =
@@ -4040,8 +4084,9 @@ function renderBattle() {
     enemyStatusTags.push(`阶段 ${enemy.bossState.phase}/3`);
   }
 
+  const screenClass = getScreenSectionClass("battle-screen");
   screenRoot.innerHTML = `
-    <section class="battle-screen">
+    <section class="${screenClass}">
       <div class="row spread">
         <h2 class="screen-title">节点 ${state.run.nodeIndex + 1} - ${node ? node.label : "战斗"}</h2>
         <div class="battle-cycle-readout" aria-live="polite">
@@ -4211,8 +4256,8 @@ function renderBattle() {
       }
 
       <div class="actions ${actionFlowClass}">
-        <button class="btn primary action-btn attack ${isRecentAction("attack") ? "recent" : ""}" data-action="do-attack" ${actionLocked ? "disabled" : ""}>攻击（+1 能量）</button>
-        <button class="btn action-btn guard ${isRecentAction("defend") ? "recent" : ""}" data-action="do-defend" ${actionLocked ? "disabled" : ""}>防御（+1 能量）</button>
+        <button class="btn primary action-btn attack ${isRecentAction("attack") ? "recent" : ""}" data-action="do-attack" ${basicActionDisabled ? "disabled" : ""}>攻击（+1 能量）</button>
+        <button class="btn action-btn guard ${isRecentAction("defend") ? "recent" : ""}" data-action="do-defend" ${basicActionDisabled ? "disabled" : ""}>防御（+1 能量）</button>
         <button class="btn action-btn skill ${isRecentAction("skill") ? "recent" : ""}" data-action="do-skill" ${skillDisabled ? "disabled" : ""}>${skillActionLabel}</button>
         <button class="btn action-btn burst ${isRecentAction("burst") ? "recent" : ""}" data-action="do-burst" ${burstDisabled ? "disabled" : ""}>同步爆发（-3 能量）</button>
       </div>
@@ -4230,15 +4275,21 @@ function renderReward() {
     return;
   }
   const nextNode = NODE_PLAN[state.run.nodeIndex + 1] || null;
+  const hasNextNode = Boolean(nextNode);
+  const nextNodeNum = clamp(state.run.nodeIndex + 2, 1, state.run.maxNode);
   const battleResult = state.lastBattleResult;
+  const rewardHintText = hasNextNode
+    ? `安装 1 项指令后推进到节点 ${nextNodeNum}。`
+    : "当前为终局结算阶段。";
+  const screenClass = getScreenSectionClass("reward-screen");
 
   screenRoot.innerHTML = `
-    <section class="reward-screen">
+    <section class="${screenClass}">
       <article class="panel panel-visual reward-intro">
         <div class="row spread">
           <h2 class="screen-title">指令奖励</h2>
           <div class="row">
-            <span class="chip">下一节点 ${state.run.nodeIndex + 2}/${state.run.maxNode}</span>
+            <span class="chip">${hasNextNode ? `下一节点 ${nextNodeNum}/${state.run.maxNode}` : "终局结算"}</span>
             ${renderStageBadge(nextNode ? nextNode.danger : null, "终局")}
           </div>
         </div>
@@ -4247,7 +4298,7 @@ function renderReward() {
       </article>
       ${renderOuterLoopRail("reward", {
         phaseText: `节点 ${state.run.nodeIndex + 1} 已清除`,
-        hintText: `安装 1 项指令后推进到节点 ${state.run.nodeIndex + 2}。`,
+        hintText: rewardHintText,
       })}
       ${
         battleResult
@@ -4258,7 +4309,7 @@ function renderReward() {
           <span class="chip">节点 ${battleResult.nodeIndex} · ${battleResult.nodeLabel}</span>
         </div>
         <p>${battleResult.enemyName} 已被清除，当前流程进入奖励解码。</p>
-        ${renderFlowChain(battleResult.nodeIndex, battleResult.nodeIndex + 1, "")}
+        ${renderFlowChain(battleResult.nodeIndex, Math.min(state.run.maxNode, battleResult.nodeIndex + 1), "")}
         <div class="chip-row">
           ${battleResult.actorName ? `<span class="chip">执行者 ${battleResult.actorName}</span>` : ""}
           <span class="chip">终结动作：${battleResult.actionLabel}</span>
@@ -4272,7 +4323,13 @@ function renderReward() {
       <div class="reward-grid">
         ${
           state.pendingRewards.length === 0
-            ? '<article class="panel panel-visual reward-empty"><p class="muted">当前没有可安装的奖励指令。</p></article>'
+            ? `
+              <article class="panel panel-visual reward-empty">
+                <p class="muted">当前没有可安装的奖励指令。</p>
+                <p class="muted">可按基础配置直接推进至下一节点。</p>
+                <button class="btn" data-action="continue-without-reward">按基础配置继续</button>
+              </article>
+            `
             : state.pendingRewards
                 .map((reward, index) => {
                   const visual = getRewardVisual(reward.id);
@@ -4338,9 +4395,10 @@ function renderRunEnd() {
     0,
     clearedNodes * 12 + survivorCount * 6 + installedCount * 4 + (isWin ? 20 : 0)
   );
+  const screenClass = getScreenSectionClass("run-end-screen");
 
   screenRoot.innerHTML = `
-    <section class="run-end-screen">
+    <section class="${screenClass}">
       <article class="panel panel-visual end-hero ${isWin ? "success" : "failure"}">
         <div class="row spread">
           <h2 class="screen-title">${title}</h2>
@@ -4377,6 +4435,23 @@ function renderRunEnd() {
 }
 
 function render() {
+  const uiState = state.ui || {
+    lastRenderedScreen: "",
+    screenTransitionPending: false,
+  };
+  state.ui = uiState;
+  const screenChanged = uiState.lastRenderedScreen !== state.screen;
+  uiState.screenTransitionPending = screenChanged;
+  if (screenChanged) {
+    uiState.lastRenderedScreen = state.screen;
+    if (window.scrollY > 0) {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    }
+  }
+
   renderHeader();
 
   if (state.screen === "title") {
@@ -4396,6 +4471,7 @@ function render() {
   }
 
   renderLog();
+  uiState.screenTransitionPending = false;
 }
 
 document.addEventListener("click", (event) => {
@@ -4443,6 +4519,9 @@ document.addEventListener("click", (event) => {
   }
   if (action === "pick-reward") {
     applyReward(button.dataset.rewardId);
+  }
+  if (action === "continue-without-reward") {
+    continueWithoutReward();
   }
   if (action === "to-title") {
     abortRun();
