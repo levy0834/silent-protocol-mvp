@@ -5,6 +5,18 @@ const CONFIG = {
   energyCap: 4,
 };
 
+const BATTLE_DECISION_HINTS = {
+  attack: "稳一点：先补能量并压低敌方完整度。",
+  defend: "这回合危险偏高，先防一手能明显抬容错。",
+  skill: "现在有能量了，可以用技能换节奏优势。",
+  burst: "这是收头按钮，确认能打出价值再按。",
+};
+
+const SMOKE_TEST_MODE =
+  typeof window !== "undefined" &&
+  window.location &&
+  new URLSearchParams(window.location.search).get("smoke") === "1";
+
 const NODE_PLAN = [
   { id: 1, label: "入侵裂口", danger: "Skirmish", enemies: ["warden", "hunter"] },
   { id: 2, label: "信号伏击", danger: "Skirmish", enemies: ["hunter", "siren"] },
@@ -321,12 +333,21 @@ const state = {
   ui: {
     lastRenderedScreen: "",
     screenTransitionPending: false,
+    battleSecondaryTab: "status",
+    rewardSecondaryTab: "build",
+    selectedRewardId: null,
+    rewardInstallingId: null,
+    rewardInstallingUntil: 0,
+    rewardInstallTimerId: null,
+    titleHelpOpen: false,
+    titleRosterOpen: false,
   },
 };
 
 const screenRoot = document.getElementById("screen-root");
 const runInfo = document.getElementById("run-info");
 const logList = document.getElementById("log-list");
+const logPanelDetails = document.getElementById("log-panel-details");
 const ENEMY_STAGE_TARGET_ID = "__enemy__";
 
 const DANGER_LABELS = {
@@ -542,6 +563,7 @@ const BATTLE_ACTION_RECENT_MS = 780;
 const BATTLE_VICTORY_COLLAPSE_MS = 380;
 const BATTLE_VICTORY_HANDOFF_MS = 700;
 const REWARD_REVEAL_STAGGER_MS = 120;
+const REWARD_INSTALL_FEEDBACK_MS = 620;
 const BATTLE_FLOAT_LABELS = {
   attack: "行动",
   damage: "受击",
@@ -563,6 +585,41 @@ const THREAT_INTENSITY_PCT = {
   high: 78,
   extreme: 96,
 };
+
+const BATTLE_SECONDARY_TABS = {
+  status: { label: "详细状态" },
+  logs: { label: "行动记录" },
+  directives: { label: "指令栈" },
+};
+
+const REWARD_SECONDARY_TABS = {
+  build: { label: "当前构筑" },
+  receipt: { label: "战场回执" },
+  flow: { label: "推进轨道" },
+};
+
+function clearRewardInstallTimer() {
+  if (!state.ui || !state.ui.rewardInstallTimerId) {
+    return;
+  }
+  window.clearTimeout(state.ui.rewardInstallTimerId);
+  state.ui.rewardInstallTimerId = null;
+}
+
+function resetScreenUiState() {
+  clearRewardInstallTimer();
+  if (!state.ui) {
+    state.ui = {};
+  }
+  state.ui.battleSecondaryTab = "status";
+  state.ui.rewardSecondaryTab = "build";
+  state.ui.selectedRewardId = null;
+  state.ui.rewardInstallingId = null;
+  state.ui.rewardInstallingUntil = 0;
+  state.ui.rewardInstallTimerId = null;
+  state.ui.titleHelpOpen = false;
+  state.ui.titleRosterOpen = false;
+}
 
 const NODE_OPERATION_VISUALS = {
   "overclock-surge": {
@@ -1616,6 +1673,7 @@ function startRun() {
   state.lastBattleResult = null;
   state.lastTransition = null;
   state.runResult = null;
+  resetScreenUiState();
   state.screen = "squad";
   state.log = [];
   state.logCursor = 0;
@@ -1630,6 +1688,12 @@ function startRun() {
       tone: "info",
     });
   }
+  if (SMOKE_TEST_MODE) {
+    addLog("验活模式已启用：首节点敌方完整性固定为 1，首回合命中后可直达奖励页。", {
+      phase: "system",
+      tone: "warn",
+    });
+  }
   render();
 }
 
@@ -1642,6 +1706,7 @@ function abortRun() {
   state.lastBattleResult = null;
   state.lastTransition = null;
   state.runResult = null;
+  resetScreenUiState();
   state.log = [];
   state.logCursor = 0;
   addLog("协议已重置，等待新的行动。", { phase: "system", tone: "neutral" });
@@ -1732,6 +1797,12 @@ function buildEnemy() {
       : null,
     intent: null,
   };
+
+  if (SMOKE_TEST_MODE && state.run && state.run.nodeIndex === 0) {
+    enemy.hp = 1;
+    enemy.armor = 0;
+    enemy.charge = 0;
+  }
 
   queueEnemyIntent(enemy);
   return enemy;
@@ -2556,6 +2627,74 @@ function getActionLabel(actionType, actor) {
   return "行动";
 }
 
+function getBattleRecommendation(actor, enemy, intentThreatKey, flowHint = "") {
+  const recommendedAction = !actor
+    ? "wait"
+    : state.battle && state.battle.pendingFinish
+      ? "wait"
+      : intentThreatKey === "extreme" || intentThreatKey === "high"
+        ? actor.energy >= getSkillCost(actor) && actor.role === "Vanguard"
+          ? "skill"
+          : "defend"
+        : enemy.hp <= Math.max(6, actor.atk + 1)
+          ? actor.energy >= 3
+            ? "burst"
+            : "attack"
+          : actor.energy >= getSkillCost(actor)
+            ? "skill"
+            : "attack";
+
+  const actionName = recommendedAction === "wait"
+    ? "等待结算"
+    : recommendedAction === "attack"
+      ? "攻击"
+      : recommendedAction === "defend"
+        ? "防御"
+        : recommendedAction === "skill"
+          ? actor
+            ? actor.skill.title
+            : "技能"
+          : "同步爆发";
+  const label = recommendedAction === "wait" ? actionName : `推荐：${actionName}`;
+  const text = recommendedAction === "wait"
+    ? flowHint
+    : recommendedAction === "skill" && actor
+      ? `${actor.name} 现在适合交技能，抢节奏。`
+      : recommendedAction === "defend"
+        ? BATTLE_DECISION_HINTS.defend
+        : recommendedAction === "burst"
+          ? BATTLE_DECISION_HINTS.burst
+          : BATTLE_DECISION_HINTS.attack;
+
+  return {
+    action: recommendedAction,
+    actionName,
+    label,
+    text,
+  };
+}
+
+function triggerRecommendedBattleAction(recommendedAction) {
+  if (!recommendedAction || recommendedAction === "wait") {
+    return;
+  }
+  if (recommendedAction === "attack") {
+    performAction("attack");
+    return;
+  }
+  if (recommendedAction === "defend") {
+    performAction("defend");
+    return;
+  }
+  if (recommendedAction === "skill") {
+    performAction("skill");
+    return;
+  }
+  if (recommendedAction === "burst") {
+    performAction("burst");
+  }
+}
+
 function beginBattleVictoryFlow(actor, actionLabel, playerDamage) {
   if (!state.battle) {
     return;
@@ -2768,6 +2907,7 @@ function applyPostBattleRecovery() {
 
 function endRun(result, reason) {
   state.runResult = result;
+  resetScreenUiState();
   state.screen = "run-end";
   clearCurrentBattleFx();
   state.battle = null;
@@ -2834,14 +2974,22 @@ function onBattleWin(victoryPayload = null) {
   }
 
   state.pendingRewards = getRewardChoices();
+  resetScreenUiState();
   state.screen = "reward";
   clearCurrentBattleFx();
   state.battle = null;
   const clearedNodeLabel = node ? getDangerLabel(node.danger) : "节点战斗";
-  addLog(`${clearedNodeLabel}已清除，请选择一项指令奖励。`, {
-    phase: "reward",
-    tone: "success",
-  });
+  if (state.pendingRewards.length > 0) {
+    addLog(`${clearedNodeLabel}已清除，请先点选一项指令奖励，再在底部确认安装。`, {
+      phase: "reward",
+      tone: "success",
+    });
+  } else {
+    addLog(`${clearedNodeLabel}已清除，但未解码到可安装指令，可按基础配置继续。`, {
+      phase: "reward",
+      tone: "warn",
+    });
+  }
   render();
 }
 
@@ -2852,8 +3000,16 @@ function advanceToNextNode(rewardTitle = "", options = {}) {
 
   const previousNodeNum = state.run.nodeIndex + 1;
   const previousTransition = state.lastTransition;
+  const nextNode = NODE_PLAN[state.run.nodeIndex + 1] || null;
   state.pendingRewards = [];
   state.lastBattleResult = null;
+  resetScreenUiState();
+
+  if (!nextNode) {
+    endRun("victory", rewardTitle ? `已完成最终节点，并安装 ${rewardTitle}。` : "已完成最终节点。");
+    return;
+  }
+
   state.run.nodeIndex += 1;
   const nextNodeNum = state.run.nodeIndex + 1;
   state.lastTransition = {
@@ -2868,9 +3024,9 @@ function advanceToNextNode(rewardTitle = "", options = {}) {
   ensureNodeOperationPlan(state.run.nodeIndex);
   ensureValidSquad();
   state.screen = "squad";
-  const nextNode = getCurrentNode();
-  if (nextNode) {
-    addLog(`${options.logPrefix || "链路推进至"}第 ${nextNodeNum} 节点：${nextNode.label}。`, {
+  const currentNode = getCurrentNode();
+  if (currentNode) {
+    addLog(`${options.logPrefix || "链路推进至"}第 ${nextNodeNum} 节点：${currentNode.label}。`, {
       phase: options.logPhase || "transition",
       tone: options.logTone || "info",
     });
@@ -2878,13 +3034,8 @@ function advanceToNextNode(rewardTitle = "", options = {}) {
   render();
 }
 
-function applyReward(rewardId) {
-  if (!state.run) {
-    return;
-  }
-
-  const reward = state.pendingRewards.find((item) => item.id === rewardId);
-  if (!reward) {
+function finalizeRewardInstall(reward) {
+  if (!state.run || !reward) {
     return;
   }
 
@@ -2899,11 +3050,65 @@ function applyReward(rewardId) {
   }
 
   addLog(`已安装指令：${reward.title}。`, { phase: "reward", tone: "success" });
+  if (state.ui) {
+    state.ui.selectedRewardId = null;
+    state.ui.rewardInstallingId = null;
+    state.ui.rewardInstallingUntil = 0;
+  }
   advanceToNextNode(reward.title);
 }
 
+function startRewardInstallFeedback(rewardId, onComplete) {
+  if (!state.ui || !rewardId) {
+    return;
+  }
+  clearRewardInstallTimer();
+  state.ui.rewardInstallingId = rewardId;
+  state.ui.rewardInstallingUntil = Date.now() + REWARD_INSTALL_FEEDBACK_MS;
+  state.ui.rewardInstallTimerId = window.setTimeout(() => {
+    if (!state.ui || state.ui.rewardInstallingId !== rewardId) {
+      return;
+    }
+    state.ui.rewardInstallTimerId = null;
+    if (typeof onComplete === "function") {
+      onComplete();
+    }
+  }, REWARD_INSTALL_FEEDBACK_MS);
+}
+
+function applyReward(rewardId) {
+  if (!state.run || state.screen !== "reward" || !rewardId) {
+    return;
+  }
+  if (state.ui && state.ui.rewardInstallingId) {
+    return;
+  }
+
+  const reward = state.pendingRewards.find((item) => item.id === rewardId);
+  if (!reward) {
+    return;
+  }
+
+  startRewardInstallFeedback(reward.id, () => {
+    if (!state.run || state.screen !== "reward") {
+      return;
+    }
+    const pendingReward = state.pendingRewards.find((item) => item.id === reward.id);
+    if (!pendingReward) {
+      return;
+    }
+    finalizeRewardInstall(pendingReward);
+  });
+  render();
+}
+
 function continueWithoutReward() {
-  if (!state.run || state.screen !== "reward" || state.pendingRewards.length > 0) {
+  if (
+    !state.run ||
+    state.screen !== "reward" ||
+    state.pendingRewards.length > 0 ||
+    (state.ui && state.ui.rewardInstallingId)
+  ) {
     return;
   }
 
@@ -2915,6 +3120,42 @@ function continueWithoutReward() {
     logPrefix: "链路按基础配置推进至",
     logTone: "warn",
   });
+}
+
+function selectRewardCandidate(candidateId) {
+  if (!state.run || state.screen !== "reward") {
+    return;
+  }
+  if (state.ui && state.ui.rewardInstallingId) {
+    return;
+  }
+
+  const rewardId = (candidateId || "").trim();
+  if (!rewardId) {
+    return;
+  }
+
+  const reward = state.pendingRewards.find((item) => item.id === rewardId);
+  if (!reward) {
+    return;
+  }
+
+  if (!state.ui) {
+    state.ui = {};
+  }
+
+  const alreadySelected = state.ui.selectedRewardId === rewardId;
+  state.ui.selectedRewardId = alreadySelected ? null : rewardId;
+  addLog(
+    alreadySelected
+      ? `已取消锁定指令：${reward.title}。`
+      : `已锁定待安装指令：${reward.title}。`,
+    {
+      phase: "reward",
+      tone: alreadySelected ? "neutral" : "info",
+    }
+  );
+  render();
 }
 
 function formatAgentStatus(agent) {
@@ -3454,6 +3695,282 @@ function renderSquadRosterDigest(squad) {
   `;
 }
 
+function ensureBattleSecondaryTab() {
+  if (!state.ui) {
+    state.ui = {};
+  }
+  if (!state.ui.battleSecondaryTab || !BATTLE_SECONDARY_TABS[state.ui.battleSecondaryTab]) {
+    state.ui.battleSecondaryTab = "status";
+  }
+  return state.ui.battleSecondaryTab;
+}
+
+function ensureRewardSecondaryTab() {
+  if (!state.ui) {
+    state.ui = {};
+  }
+  if (!state.ui.rewardSecondaryTab || !REWARD_SECONDARY_TABS[state.ui.rewardSecondaryTab]) {
+    state.ui.rewardSecondaryTab = "build";
+  }
+  return state.ui.rewardSecondaryTab;
+}
+
+function renderBattleStatusSecondary(stagedSquad, enemy, selectedActorId, intentTarget = "未知") {
+  const allyRows = stagedSquad.length > 0
+    ? `
+      <div class="battle-status-list">
+        ${stagedSquad
+          .map((agent) => {
+            const selected = selectedActorId === agent.id;
+            const statusTags = formatAgentStatus(agent);
+            const hpPct = clamp(Math.round((agent.hp / Math.max(1, agent.hpMax)) * 100), 0, 100);
+            const skillCost = getSkillCost(agent);
+            return `
+              <article class="battle-status-row ${selected ? "selected" : ""} ${agent.hp <= 0 ? "offline" : ""}">
+                <div class="battle-status-row-head">
+                  <strong>${agent.name}</strong>
+                  <span>${getRoleLabel(agent.role)}</span>
+                </div>
+                <div class="battle-status-row-meta">
+                  <span>HP ${agent.hp}/${agent.hpMax}</span>
+                  <span>攻击 ${agent.atk}</span>
+                  <span>能量 ${agent.energy}</span>
+                </div>
+                <span class="battle-status-hp"><span style="width:${hpPct}%"></span></span>
+                ${
+                  statusTags.length > 0
+                    ? `<div class="chip-row">${statusTags.map((tag) => `<span class="chip">${tag}</span>`).join("")}</div>`
+                    : "<p>当前无状态效果。</p>"
+                }
+                <p>技能：${agent.skill.title}（耗能 ${skillCost}）</p>
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+    `
+    : '<p class="muted battle-secondary-empty">当前无可显示单位。</p>';
+
+  const enemyStatusTags = [];
+  if (enemy.armor > 0) {
+    enemyStatusTags.push(`装甲 ${enemy.armor}`);
+  }
+  if (enemy.charge > 0) {
+    enemyStatusTags.push(`充能 ${enemy.charge}`);
+  }
+  if (enemy.status.exposed > 0) {
+    enemyStatusTags.push(`破绽 ${enemy.status.exposed}`);
+  }
+  if (enemy.bossState) {
+    enemyStatusTags.push(`阶段 ${enemy.bossState.phase}/3`);
+  }
+  const enemyHpPct = clamp(Math.round((enemy.hp / Math.max(1, enemy.hpMax)) * 100), 0, 100);
+  const enemyDossier = enemy.bossState && Array.isArray(enemy.dossier) && enemy.dossier.length > 0
+    ? `<p class="muted battle-enemy-dossier">${enemy.dossier[enemy.bossState.phase - 1] || enemy.dossier[0]}</p>`
+    : "";
+
+  return `
+    <div class="battle-status-grid">
+      <article class="battle-status-card">
+        <h4>我方状态</h4>
+        ${allyRows}
+      </article>
+      <article class="battle-status-card">
+        <h4>敌方状态</h4>
+        <article class="battle-status-row selected">
+          <div class="battle-status-row-head">
+            <strong>${enemy.name}</strong>
+            <span>${enemy.role}</span>
+          </div>
+          <div class="battle-status-row-meta">
+            <span>HP ${enemy.hp}/${enemy.hpMax}</span>
+            <span>攻击 ${enemy.atk}</span>
+            <span>目标 ${intentTarget}</span>
+          </div>
+          <span class="battle-status-hp"><span style="width:${enemyHpPct}%"></span></span>
+          ${
+            enemyStatusTags.length > 0
+              ? `<div class="chip-row">${enemyStatusTags.map((tag) => `<span class="chip">${tag}</span>`).join("")}</div>`
+              : "<p>敌方当前无额外修正。</p>"
+          }
+        </article>
+        ${enemyDossier}
+        <div class="battle-inline-summary">${renderIntentSequenceTrack(enemy, 4)}</div>
+      </article>
+    </div>
+  `;
+}
+
+function renderBattleLogsSecondary() {
+  if (!Array.isArray(state.log) || state.log.length === 0) {
+    return '<p class="muted battle-secondary-empty">暂无行动记录。</p>';
+  }
+
+  const entries = state.log
+    .slice(0, 6)
+    .map((rawEntry, index) => {
+      const fallbackId = Math.max(1, (state.logCursor || 0) - index);
+      return normalizeLogEntry(rawEntry, fallbackId);
+    });
+
+  return `
+    <ul class="battle-log-mini-list">
+      ${entries
+        .map((entry) => {
+          const phaseLabel = LOG_PHASE_META[entry.phase] ? LOG_PHASE_META[entry.phase].label : "系统";
+          return `
+            <li class="battle-log-mini-entry phase-${entry.phase} tone-${entry.tone}">
+              <div class="battle-log-mini-head">
+                <span>${phaseLabel}</span>
+                <span>#${entry.id}</span>
+              </div>
+              <p>${entry.text || "（空白记录）"}</p>
+            </li>
+          `;
+        })
+        .join("")}
+    </ul>
+  `;
+}
+
+function renderBattleDirectivesSecondary() {
+  return `
+    <p class="muted battle-directive-stack-note">当前节点流程与已装载指令如下。</p>
+    ${renderOuterLoopRail("battle", {
+      phaseText: `节点 ${state.run.nodeIndex + 1} 交战中`,
+      hintText: "完成当前节点后将进入指令奖励阶段。",
+    })}
+    ${renderDirectivePanel("指令栈")}
+  `;
+}
+
+function renderBattleSecondaryPanel(stagedSquad, enemy, selectedActorId, intentTarget) {
+  const activeTab = ensureBattleSecondaryTab();
+  let content = renderBattleStatusSecondary(stagedSquad, enemy, selectedActorId, intentTarget);
+
+  if (activeTab === "logs") {
+    content = renderBattleLogsSecondary();
+  }
+  if (activeTab === "directives") {
+    content = renderBattleDirectivesSecondary();
+  }
+
+  return `
+    <article class="panel panel-visual battle-secondary-panel screen-stack-panel-tight">
+      <div class="row spread">
+        <h3>二级信息面板</h3>
+        <span class="chip">${BATTLE_SECONDARY_TABS[activeTab].label}</span>
+      </div>
+      <div class="battle-secondary-tabs">
+        ${Object.entries(BATTLE_SECONDARY_TABS)
+          .map(([tabId, tabMeta]) => {
+            const active = tabId === activeTab;
+            return `
+              <button
+                class="btn battle-secondary-tab-btn ${active ? "is-active" : ""}"
+                data-action="select-battle-secondary-tab"
+                data-tab="${tabId}"
+                aria-pressed="${active ? "true" : "false"}"
+              >
+                ${tabMeta.label}
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
+      <div class="battle-secondary-content">
+        ${content}
+      </div>
+    </article>
+  `;
+}
+
+function renderRewardBuildSecondary() {
+  return renderDirectivePanel("当前指令栈");
+}
+
+function renderRewardReceiptSecondary(battleResult) {
+  if (!battleResult) {
+    return '<p class="muted battle-secondary-empty">暂无可显示回执。</p>';
+  }
+  const toNodeIndex = state.run
+    ? Math.min(state.run.maxNode, battleResult.nodeIndex + 1)
+    : battleResult.nodeIndex + 1;
+
+  return `
+    <article class="panel panel-visual reward-bridge">
+      <div class="row spread">
+        <h3>战场回执</h3>
+        <span class="chip">节点 ${battleResult.nodeIndex} · ${battleResult.nodeLabel}</span>
+      </div>
+      <p>${battleResult.enemyName} 已被清除，当前流程进入奖励解码。</p>
+      ${renderFlowChain(battleResult.nodeIndex, toNodeIndex, "")}
+      <div class="chip-row">
+        ${battleResult.actorName ? `<span class="chip">执行者 ${battleResult.actorName}</span>` : ""}
+        <span class="chip">终结动作：${battleResult.actionLabel}</span>
+        <span class="chip">终结伤害 ${battleResult.playerDamage}</span>
+        <span class="chip">战后修复 ${battleResult.recoveredHp > 0 ? `+${battleResult.recoveredHp}` : "0"}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderRewardFlowSecondary(rewardHintText) {
+  if (!state.run) {
+    return '<p class="muted battle-secondary-empty">当前无可显示流程。</p>';
+  }
+
+  return `
+    <p class="muted battle-directive-stack-note">${rewardHintText}</p>
+    ${renderOuterLoopRail("reward", {
+      phaseText: `节点 ${state.run.nodeIndex + 1} 已清除`,
+      hintText: rewardHintText,
+    })}
+    ${renderStageProgress(state.run.nodeIndex + 1, state.run.nodeIndex + 1)}
+  `;
+}
+
+function renderRewardSecondaryPanel(battleResult, rewardHintText) {
+  const activeTab = ensureRewardSecondaryTab();
+  let content = renderRewardBuildSecondary();
+
+  if (activeTab === "receipt") {
+    content = renderRewardReceiptSecondary(battleResult);
+  }
+  if (activeTab === "flow") {
+    content = renderRewardFlowSecondary(rewardHintText);
+  }
+
+  return `
+    <article class="panel panel-visual battle-secondary-panel reward-secondary-panel screen-stack-panel-tight">
+      <div class="row spread">
+        <h3>二级信息面板</h3>
+        <span class="chip">${REWARD_SECONDARY_TABS[activeTab].label}</span>
+      </div>
+      <div class="battle-secondary-tabs reward-secondary-tabs">
+        ${Object.entries(REWARD_SECONDARY_TABS)
+          .map(([tabId, tabMeta]) => {
+            const active = tabId === activeTab;
+            return `
+              <button
+                class="btn battle-secondary-tab-btn reward-secondary-tab-btn ${active ? "is-active" : ""}"
+                data-action="select-reward-secondary-tab"
+                data-tab="${tabId}"
+                aria-pressed="${active ? "true" : "false"}"
+              >
+                ${tabMeta.label}
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
+      <div class="battle-secondary-content reward-secondary-content">
+        ${content}
+      </div>
+    </article>
+  `;
+}
+
 function renderBossPhaseReference(bossTemplate) {
   if (!bossTemplate || !bossTemplate.phasePatterns) {
     return "";
@@ -3584,34 +4101,16 @@ function renderNodeOperationPanel() {
   const selectedOperation = operationPlan.selectedId
     ? getNodeOperationById(operationPlan.selectedId)
     : null;
-  const selectedVisual = selectedOperation ? getNodeOperationVisual(selectedOperation.id) : null;
-  const overview = selectedOperation
-    ? `
-      <article class="operation-overview selected protocol-${selectedVisual.style}">
-        <div class="row spread">
-          <h4>当前锁定协议：${selectedOperation.title}</h4>
-          <span class="chip operation-chip-selected">已锁定</span>
-        </div>
-        <p class="muted">收益：${selectedOperation.reward}</p>
-        <p class="muted">代价：${selectedOperation.risk}</p>
-      </article>
-    `
-    : `
-      <article class="operation-overview pending">
-        <div class="row spread">
-          <h4>尚未锁定节点协议</h4>
-          <span class="chip operation-chip-pending">必选</span>
-        </div>
-        <p class="muted">部署前请先选择 1 项协议（每项都包含收益与代价），再确认开局节奏。</p>
-      </article>
-    `;
+  const selectedLabel = selectedOperation ? `已锁定：${selectedOperation.title}` : "待锁定（必选）";
 
   return `
-    <article class="panel panel-visual screen-stack-panel">
-      <h3>节点协议（必选 1 项）</h3>
-      <p class="muted">每项协议 = 1 条收益 + 1 条代价。可先比较压力等级，首轮建议优先选择 2-3 格风险。</p>
-      ${overview}
-      <div class="card-grid">
+    <article class="panel panel-visual screen-stack-panel compact-protocol-panel">
+      <div class="row spread">
+        <h3>节点协议（必选 1 项）</h3>
+        <span class="chip ${selectedOperation ? "operation-chip-selected" : "operation-chip-pending"}">${selectedLabel}</span>
+      </div>
+      <p class="muted">默认只展示决策摘要，点“展开细节”再看完整收益与代价。</p>
+      <div class="card-grid protocol-choice-grid">
         ${options
           .map((operation, index) => {
             const selected = operationPlan.selectedId === operation.id;
@@ -3624,7 +4123,7 @@ function renderNodeOperationPanel() {
             const protocolState = selected ? "已锁定" : hasPicked ? "可切换" : "待选择";
             const switchClass = selected ? "selected" : hasPicked ? "switchable" : "";
             return `
-              <article class="card protocol-card protocol-${visual.style} ${selected ? "selected" : ""}">
+              <article class="card protocol-card compact protocol-${visual.style} ${selected ? "selected" : ""}">
                 <div class="protocol-meta row spread">
                   <span class="protocol-index">方案 ${index + 1}</span>
                   <span class="protocol-state ${switchClass}">${protocolState}</span>
@@ -3636,18 +4135,23 @@ function renderNodeOperationPanel() {
                     <p class="muted">${visual.tone}</p>
                   </div>
                 </div>
-                <div class="protocol-line positive">
-                  <span class="protocol-tag">${visual.rewardTag}</span>
-                  <p>${operation.reward}</p>
+                <div class="chip-row protocol-summary-row">
+                  <span class="chip">风险 ${visual.riskLevel}/4</span>
+                  <span class="chip">${visual.rewardTag}</span>
+                  <span class="chip">${visual.riskTag}</span>
                 </div>
-                <div class="protocol-line negative">
-                  <span class="protocol-tag">${visual.riskTag}</span>
-                  <p>${operation.risk}</p>
-                </div>
+                <p class="muted protocol-compact-line">收益摘要：${operation.reward}</p>
                 <div class="protocol-risk">
                   <small>压力等级</small>
                   <div class="risk-dots">${riskDots}</div>
                 </div>
+                <details class="inline-detail-block">
+                  <summary>展开细节</summary>
+                  <div class="inline-detail-content">
+                    <p><strong>收益：</strong>${operation.reward}</p>
+                    <p><strong>代价：</strong>${operation.risk}</p>
+                  </div>
+                </details>
                 <button class="btn ${selected ? "" : "primary"}" data-action="pick-node-operation" data-operation-id="${operation.id}">
                   ${
                     selected
@@ -3710,6 +4214,9 @@ function renderHeader() {
 function renderLog() {
   if (!Array.isArray(state.log) || state.log.length === 0) {
     logList.innerHTML = '<li class="log-entry empty"><p>暂无行动记录。</p></li>';
+    if (logPanelDetails) {
+      logPanelDetails.open = false;
+    }
     return;
   }
 
@@ -3730,28 +4237,87 @@ function renderLog() {
       `;
     })
     .join("");
+
+  const latestEntry = normalizeLogEntry(state.log[0], state.logCursor || 1);
+  const attentionPhases = new Set(["reward", "battle", "transition", "run-end"]);
+  const attentionTones = new Set(["warn", "alert", "success"]);
+  if (
+    logPanelDetails &&
+    latestEntry &&
+    (attentionPhases.has(latestEntry.phase) || attentionTones.has(latestEntry.tone))
+  ) {
+    logPanelDetails.open = true;
+  }
+}
+
+function renderTitleAgentPeek() {
+  return `
+    <div class="title-agent-peek-grid">
+      ${AGENT_TEMPLATES.map((agent) => {
+        const roleVisual = getRoleVisual(agent.role);
+        const skillCost = getSkillCost(agent);
+        return `
+          <article class="title-agent-peek-card" style="--peek-accent:${roleVisual.color}; --peek-soft:${roleVisual.soft};">
+            <div class="unit-head">
+              ${renderAgentPortrait({
+                ...agent,
+                hp: agent.hpMax,
+                energy: 0,
+                status: { guard: 0, barrier: 0, jam: 0, taunt: 0 },
+              })}
+              <div class="unit-head-copy">
+                <h3>${agent.name}</h3>
+                <p>${getRoleLabel(agent.role)}</p>
+                <span class="mini-badge" style="--badge-accent:${roleVisual.color}">${roleVisual.icon}</span>
+              </div>
+            </div>
+            <div class="chip-row">
+              <span class="chip">HP ${agent.hpMax}</span>
+              <span class="chip">攻击 ${agent.atk}</span>
+              <span class="chip">技能耗能 ${skillCost}</span>
+            </div>
+            <p class="muted"><strong>技能：</strong>${agent.skill.title}</p>
+            <p class="muted"><strong>被动：</strong>${agent.passive}</p>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 
 function renderTitle() {
   const screenClass = getScreenSectionClass("title-screen");
+  const smokeHint = SMOKE_TEST_MODE
+    ? '<p class="muted">验活模式已启用：首节点首回合命中后可快速进入奖励页。</p>'
+    : "";
+  const helpOpen = Boolean(state.ui && state.ui.titleHelpOpen);
+  const rosterOpen = Boolean(state.ui && state.ui.titleRosterOpen);
   screenRoot.innerHTML = `
     <section class="${screenClass}">
-      <article class="title-hero">
+      <article class="title-hero compact-title-hero">
         <div class="title-copy">
+          <div class="title-hero-badges">
+            <span class="chip">3 人小队</span>
+            <span class="chip">4 节点短局</span>
+            <span class="chip">竖屏战术原型</span>
+          </div>
           <h2 class="screen-title">寂静协议</h2>
-          <p>组建一支 3 人智能体突击小队，击穿 4 个递进节点，并摧毁寂静核心。</p>
-          <p class="title-goal">本局目标：每个节点完成“选协议 → 打赢战斗 → 选 1 项指令”，清完 4 节点即胜利。</p>
-          <article class="title-quickstart">
-            <h3>首轮行动速览（约 2 分钟）</h3>
-            <ol class="title-steps">
-              <li>节点准备：锁定 1 项协议，并确认部署位。</li>
-              <li>节点战斗：每回合选择 1 个行动，先看敌方意图。</li>
-              <li>指令奖励：胜利后安装 1 项升级，再推进下一节点。</li>
-            </ol>
-          </article>
-          <p class="muted">纯本地静态原型，无需后端。聚焦角色协同与快节奏战术短局。</p>
-          <div class="row">
-            <button class="btn primary" data-action="start-run">开始行动（首轮约 2 分钟）</button>
+          <p class="title-tagline">先做决定，再看细节。像玩游戏，不像读说明书。</p>
+          <p class="title-goal">你的目标很简单：组建 3 人突击小队，连续清除 4 个节点，最终摧毁寂静核心。</p>
+          ${smokeHint}
+          <div class="title-primary-actions">
+            <button class="btn primary title-main-btn" data-action="start-run">开始行动</button>
+            <button class="btn" data-action="toggle-title-help" aria-pressed="${helpOpen ? "true" : "false"}">${helpOpen ? "收起怎么玩" : "怎么玩"}</button>
+            <button class="btn" data-action="toggle-title-roster" aria-pressed="${rosterOpen ? "true" : "false"}">${rosterOpen ? "收起特工速览" : "查看特工"}</button>
+          </div>
+          <div class="title-kickoff-strip">
+            <span class="title-kickoff-step is-active">1. 锁定协议</span>
+            <span class="title-kickoff-arrow">→</span>
+            <span class="title-kickoff-step">2. 部署小队</span>
+            <span class="title-kickoff-arrow">→</span>
+            <span class="title-kickoff-step">3. 打赢节点</span>
+            <span class="title-kickoff-arrow">→</span>
+            <span class="title-kickoff-step">4. 选指令</span>
           </div>
         </div>
         <div class="title-art" aria-hidden="true">
@@ -3770,10 +4336,41 @@ function renderTitle() {
           </svg>
         </div>
       </article>
-      <div class="title-pill-row">
-        <span class="chip">3 人小队</span>
-        <span class="chip">4 节点短局</span>
-        <span class="chip">纯前端静态运行</span>
+      <div class="title-folds">
+        ${helpOpen ? `
+          <article class="panel panel-visual title-fold-panel">
+            <div class="row spread">
+              <h3>怎么玩</h3>
+              <span class="chip">2 分钟上手</span>
+            </div>
+            <div class="title-howto-grid">
+              <article class="title-howto-step">
+                <small>STEP 1</small>
+                <strong>选 1 个节点协议</strong>
+                <p>每次开战前都要在收益和代价之间二选一。</p>
+              </article>
+              <article class="title-howto-step">
+                <small>STEP 2</small>
+                <strong>部署最多 3 名特工</strong>
+                <p>先凑出能打的组合，不需要一上来研究全部细节。</p>
+              </article>
+              <article class="title-howto-step">
+                <small>STEP 3</small>
+                <strong>看敌方意图再出手</strong>
+                <p>底部操作区固定，优先做攻击、防御、技能、爆发决策。</p>
+              </article>
+            </div>
+          </article>
+        ` : ""}
+        ${rosterOpen ? `
+          <article class="panel panel-visual title-fold-panel">
+            <div class="row spread">
+              <h3>特工速览</h3>
+              <span class="chip">点进局后可再细看</span>
+            </div>
+            ${renderTitleAgentPeek()}
+          </article>
+        ` : ""}
       </div>
     </section>
   `;
@@ -3845,7 +4442,7 @@ function renderSquad() {
     squadNextActionTone = "warn";
   }
 
-  const screenClass = getScreenSectionClass("squad-screen");
+  const screenClass = getScreenSectionClass("squad-screen screen-with-bottom-dock");
   screenRoot.innerHTML = `
     <section class="${screenClass}">
       <div class="row spread screen-head">
@@ -3871,18 +4468,11 @@ function renderSquad() {
           : ""
       }
 
-      ${renderOuterLoopRail("squad", {
-        transitionCompleted,
-        phaseText: loopPhaseText,
-        hintText: loopHintText,
-      })}
-
-      <article class="panel panel-visual stage-panel screen-stack-panel">
+      <article class="panel panel-visual stage-panel screen-stack-panel squad-primary-panel">
         <div class="row spread">
           <h3>下一场遭遇：节点 ${state.run.nodeIndex + 1} · ${node ? node.label : "未知"}</h3>
           ${renderStageBadge(node ? node.danger : null)}
         </div>
-        <p class="muted">每次胜利后自动修复：存活特工恢复 +${state.run.mods.postBattleHeal} 生命。</p>
         <div class="chip-row">
           <span class="chip ${selectedOperation ? "operation-chip-selected" : "operation-chip-pending"}">
             ${selectedOperation ? `协议已锁定：${selectedOperation.title}` : "协议未锁定"}
@@ -3892,79 +4482,17 @@ function renderSquad() {
           </span>
           ${threatLabels}
         </div>
-        ${renderDeployChecklist(selectedOperation, deployedAliveCount, aliveCount, minRecommendedDeploy)}
-        <p class="squad-next-action squad-next-action-${squadNextActionTone}">
-          ${squadNextAction}
-        </p>
         ${renderSquadRosterDigest(stagedSquad)}
-        <div class="node-brief-grid">
-          <article class="node-brief-item">
-            <small>节点压力</small>
-            <strong>${node ? getDangerLabel(node.danger) : "未知"}</strong>
-          </article>
-          <article class="node-brief-item">
-            <small>协议状态</small>
-            <strong>${selectedOperation ? "已锁定" : "待锁定"}</strong>
-          </article>
-          <article class="node-brief-item">
-            <small>可部署战力</small>
-            <strong>${deployedAliveCount}/${CONFIG.maxSquadSize}</strong>
-          </article>
-        </div>
-        ${renderStageProgress(state.run.nodeIndex, state.run.nodeIndex)}
       </article>
-
-      ${
-        transitionDigest
-          ? `
-        <article class="panel panel-visual node-transition-panel screen-stack-panel">
-          <div class="row spread">
-            <h3>节点衔接回执</h3>
-            <span class="chip">来自节点 ${transitionDigest.fromNodeIndex} · ${transitionDigest.fromNodeLabel}</span>
-          </div>
-          <p>${transitionDigest.enemyName} 已清除，终结动作为「${transitionDigest.actionLabel}」。</p>
-          ${renderFlowChain(
-            transitionDigest.fromNodeIndex,
-            transitionDigest.toNodeIndex,
-            transitionDigest.rewardTitle
-          )}
-          <div class="chip-row">
-            <span class="chip">终结动作：${transitionDigest.actionLabel}</span>
-            <span class="chip">战后修复 ${transitionDigest.recoveredHp > 0 ? `+${transitionDigest.recoveredHp}` : "0"}</span>
-            ${
-              transitionDigest.rewardTitle
-                ? `<span class="chip operation-chip-ready">已安装：${transitionDigest.rewardTitle}</span>`
-                : '<span class="chip operation-chip-pending">待安装指令奖励</span>'
-            }
-          </div>
-        </article>
-      `
-          : ""
-      }
-
-      ${
-        bossTemplate
-          ? `
-        <article class="panel boss-dossier panel-visual screen-stack-panel">
-          <div class="row">
-            ${renderEnemyPortrait({ id: bossTemplate.id })}
-            <div>
-              <h3>首领档案：${bossTemplate.name}</h3>
-              <p class="muted">${bossTemplate.role}</p>
-            </div>
-          </div>
-          <ul class="boss-dossier-list">
-            ${bossTemplate.dossier.map((line) => `<li>${line}</li>`).join("")}
-          </ul>
-          ${renderBossPhaseReference(bossTemplate)}
-        </article>
-      `
-          : ""
-      }
 
       ${renderNodeOperationPanel()}
 
-      <div class="card-grid">
+      <article class="panel panel-visual screen-stack-panel squad-agent-panel">
+        <div class="row spread">
+          <h3>部署候选</h3>
+          <span class="chip">存活 ${aliveCount}/${state.run.roster.length}</span>
+        </div>
+        <div class="card-grid squad-agent-grid">
         ${state.run.roster
           .map((agent) => {
             const checked = state.run.squadIds.includes(agent.id) ? "checked" : "";
@@ -3974,7 +4502,7 @@ function renderSquad() {
             const roleVisual = getRoleVisual(agent.role);
 
             return `
-              <article class="card unit-card agent-card role-${agent.role.toLowerCase()} ${checked ? "selected" : ""} ${dead ? "dead" : ""}" style="--role-accent:${roleVisual.color};">
+              <article class="card unit-card agent-card compact role-${agent.role.toLowerCase()} ${checked ? "selected" : ""} ${dead ? "dead" : ""}" style="--role-accent:${roleVisual.color};">
                 <div class="unit-head">
                   ${renderAgentPortrait(agent)}
                   <div class="unit-head-copy">
@@ -3983,35 +4511,113 @@ function renderSquad() {
                     <span class="mini-badge" style="--badge-accent:${roleVisual.color}">${roleVisual.icon}</span>
                   </div>
                 </div>
-                <div class="stat-row">
+                <div class="chip-row">
                   <span class="stat-pill">生命 ${agent.hp}/${agent.hpMax}</span>
                   <span class="stat-pill">攻击 ${agent.atk}</span>
                   <span class="stat-pill">能量 ${agent.energy}</span>
                 </div>
-                ${renderHpBar(agent.hp, agent.hpMax, "ally")}
-                ${renderEnergyCells(agent.energy)}
-                ${
-                  statusTags.length > 0
-                    ? `<div class="chip-row">${statusTags.map((tag) => `<span class="chip">${tag}</span>`).join("")}</div>`
-                    : '<div class="chip-row"><span class="chip">状态稳定</span></div>'
-                }
-                <p class="muted" style="margin-top:8px;">技能：${agent.skill.title}（消耗 ${skillCost} 能量）</p>
-                <p class="muted">${agent.passive}</p>
                 <label class="row deploy-switch">
                   <input type="checkbox" data-agent-toggle="${agent.id}" ${checked} ${dead ? "disabled" : ""} />
                   <span>${dead ? "离线" : "部署到小队"}</span>
                 </label>
+                <details class="inline-detail-block">
+                  <summary>展开技能与状态</summary>
+                  <div class="inline-detail-content">
+                    ${renderHpBar(agent.hp, agent.hpMax, "ally")}
+                    ${renderEnergyCells(agent.energy)}
+                    ${
+                      statusTags.length > 0
+                        ? `<div class="chip-row">${statusTags.map((tag) => `<span class="chip">${tag}</span>`).join("")}</div>`
+                        : '<p class="muted">当前无状态效果。</p>'
+                    }
+                    <p><strong>技能：</strong>${agent.skill.title}（消耗 ${skillCost} 能量）</p>
+                    <p><strong>说明：</strong>${agent.skill.desc}</p>
+                    <p><strong>被动：</strong>${agent.passive}</p>
+                  </div>
+                </details>
               </article>
             `;
           })
           .join("")}
+        </div>
+      </article>
+
+      <div class="detail-accordion">
+        <details class="inline-detail-block">
+          <summary>展开节点与部署详情</summary>
+          <div class="inline-detail-content">
+            <p class="muted">${loopHintText}</p>
+            ${renderOuterLoopRail("squad", {
+              transitionCompleted,
+              phaseText: loopPhaseText,
+              hintText: "",
+            })}
+            <p class="muted">每次胜利后自动修复：存活特工恢复 +${state.run.mods.postBattleHeal} 生命。</p>
+            ${renderDeployChecklist(selectedOperation, deployedAliveCount, aliveCount, minRecommendedDeploy)}
+            ${renderStageProgress(state.run.nodeIndex, state.run.nodeIndex)}
+          </div>
+        </details>
+        ${
+          transitionDigest
+            ? `
+        <details class="inline-detail-block">
+          <summary>展开节点衔接回执</summary>
+          <div class="inline-detail-content">
+            <p>${transitionDigest.enemyName} 已清除，终结动作为「${transitionDigest.actionLabel}」。</p>
+            ${renderFlowChain(
+              transitionDigest.fromNodeIndex,
+              transitionDigest.toNodeIndex,
+              transitionDigest.rewardTitle
+            )}
+            <div class="chip-row">
+              <span class="chip">终结动作：${transitionDigest.actionLabel}</span>
+              <span class="chip">战后修复 ${transitionDigest.recoveredHp > 0 ? `+${transitionDigest.recoveredHp}` : "0"}</span>
+              ${
+                transitionDigest.rewardTitle
+                  ? `<span class="chip operation-chip-ready">已安装：${transitionDigest.rewardTitle}</span>`
+                  : '<span class="chip operation-chip-pending">待安装指令奖励</span>'
+              }
+            </div>
+          </div>
+        </details>
+      `
+            : ""
+        }
+        ${
+          bossTemplate
+            ? `
+        <details class="inline-detail-block">
+          <summary>展开首领档案：${bossTemplate.name}</summary>
+          <div class="inline-detail-content">
+            <div class="row">
+              ${renderEnemyPortrait({ id: bossTemplate.id })}
+              <div>
+                <p class="muted">${bossTemplate.role}</p>
+              </div>
+            </div>
+            <ul class="boss-dossier-list">
+              ${bossTemplate.dossier.map((line) => `<li>${line}</li>`).join("")}
+            </ul>
+            ${renderBossPhaseReference(bossTemplate)}
+          </div>
+        </details>
+      `
+            : ""
+        }
+        <details class="inline-detail-block">
+          <summary>展开当前指令栈</summary>
+          <div class="inline-detail-content">
+            ${renderDirectivePanel("指令栈")}
+          </div>
+        </details>
       </div>
 
-      ${renderDirectivePanel("指令栈")}
-
-      <div class="row screen-action-row">
-        <button class="btn primary" data-action="deploy" ${deployDisabled ? "disabled" : ""}>${deployButtonLabel}</button>
-        <button class="btn warn" data-action="abort-run">终止行动</button>
+      <div class="screen-bottom-action-bar squad-action-dock">
+        <p class="bottom-action-info squad-next-action-${squadNextActionTone}">${squadNextAction}</p>
+        <div class="bottom-action-buttons">
+          <button class="btn primary" data-action="deploy" ${deployDisabled ? "disabled" : ""}>${deployButtonLabel}</button>
+          <button class="btn warn" data-action="abort-run">终止行动</button>
+        </div>
       </div>
 
       ${
@@ -4100,29 +4706,42 @@ function renderBattle() {
   const intentThreatClass = `intent-${intentThreatKey}`;
   const threatDirective = getThreatDirective(intentThreatKey);
   const intentIcon = getIntentIcon(enemy.intent.id);
-  const activeNodeOperationVisual = activeNodeOperation
-    ? getNodeOperationVisual(activeNodeOperation.id)
-    : null;
-  const enemyVisual = getEnemyVisual(enemy.id);
   const turnPulseClass = hasBattleArenaEffect("turn-shift") ? "pulse" : "";
   const phasePulseClass = hasBattleArenaEffect("phase-shift") ? "pulse" : "";
   const phaseReadout = enemy.bossState ? `阶段 ${enemy.bossState.phase}/3` : "常规遭遇";
+  const actorStatusTags = actor ? formatAgentStatus(actor) : [];
+  const actorStatusPreview = actorStatusTags.slice(0, 2);
+  const actorHint = !actor
+    ? "当前无可操控特工。"
+    : actor.energy < skillCost
+      ? `能量不足，建议先使用攻击/防御积攒到 ${skillCost} 点后再放 ${actor.skill.title}。`
+      : `优先观察敌方意图，再决定使用 ${actor.skill.title}（消耗 ${skillCost}）。`;
+  const battleRecommendation = getBattleRecommendation(actor, enemy, intentThreatKey, flowHint);
+  const battleRecommendedAction = battleRecommendation.action;
+  const battleRecommendationLabel = battleRecommendation.label;
+  const battleRecommendationText = battleRecommendation.text;
+  const recommendationDisabled = battleRecommendedAction === "wait"
+    || (battleRecommendedAction === "attack" || battleRecommendedAction === "defend"
+      ? basicActionDisabled
+      : battleRecommendedAction === "skill"
+        ? skillDisabled
+        : battleRecommendedAction === "burst"
+          ? burstDisabled
+          : true);
+  const recommendationDisableReason = recommendationDisabled
+    ? battleRecommendedAction === "wait"
+      ? flowHint
+      : battleRecommendedAction === "attack" || battleRecommendedAction === "defend"
+        ? basicDisableReason
+        : battleRecommendedAction === "skill"
+          ? skillDisableReason
+          : burstDisableReason
+    : "";
+  const recommendationButtonLabel = battleRecommendedAction === "wait"
+    ? "等待结算"
+    : `执行推荐：${battleRecommendation.actionName}`;
 
-  const enemyStatusTags = [];
-  if (enemy.armor > 0) {
-    enemyStatusTags.push(`装甲 ${enemy.armor}`);
-  }
-  if (enemy.charge > 0) {
-    enemyStatusTags.push(`充能 ${enemy.charge}`);
-  }
-  if (enemy.status.exposed > 0) {
-    enemyStatusTags.push(`破绽 ${enemy.status.exposed}`);
-  }
-  if (enemy.bossState) {
-    enemyStatusTags.push(`阶段 ${enemy.bossState.phase}/3`);
-  }
-
-  const screenClass = getScreenSectionClass("battle-screen");
+  const screenClass = getScreenSectionClass("battle-screen screen-with-bottom-dock");
   screenRoot.innerHTML = `
     <section class="${screenClass}">
       <div class="row spread screen-head">
@@ -4134,44 +4753,44 @@ function renderBattle() {
         </div>
       </div>
       ${renderStageProgress(state.run.nodeIndex, state.run.nodeIndex)}
-      ${renderOuterLoopRail("battle", {
-        phaseText: `节点 ${state.run.nodeIndex + 1} 交战中`,
-        hintText: "完成当前节点后将进入指令奖励阶段。",
-      })}
 
-      ${
-        activeNodeOperation
-          ? `
-            <article class="panel panel-visual active-protocol">
-              <div class="row">
-                ${renderProtocolGlyph(activeNodeOperation.id)}
-                <div>
-                  <h3>生效协议：${activeNodeOperation.title}</h3>
-                  <p class="muted">${activeNodeOperationVisual ? activeNodeOperationVisual.tone : "节点修正中"}</p>
-                </div>
-              </div>
-            </article>
-          `
-          : ""
-      }
-
-      <article class="intent-card panel-visual intent-card-${enemy.intent.threat || "medium"}">
-        <div class="row spread">
-          <h3>敌方意图：${enemy.intent.label}</h3>
-          <span class="intent-icon-badge">${intentIcon}</span>
+      <article class="panel panel-visual battle-decision-brief">
+        <div class="row spread battle-decision-head">
+          <h3>决策简报</h3>
+          <span class="chip battle-decision-recommend ${battleRecommendedAction}">${battleRecommendationLabel}</span>
         </div>
-        <p>${enemy.intent.desc}</p>
-        <p class="intent-callout">即将执行：<strong>${enemy.intent.label}</strong> → <strong>${intentTarget}</strong></p>
-        <div class="chip-row">
-          <span class="chip ${intentThreatClass}">威胁 ${getThreatLabel(intentThreatKey)} · ${threatDirective}</span>
-          <span class="chip intent-target-chip">可能目标：${intentTarget}</span>
-          <span class="chip intent-forecast-chip">效果预估：${intentForecast}</span>
-          ${enemy.bossState ? `<span class="chip intent-phase-chip">主核阶段 ${enemy.bossState.phase}/3</span>` : ""}
+        <div class="battle-decision-grid">
+          <article class="battle-decision-card enemy ${intentThreatClass}">
+            <small>敌方当前意图</small>
+            <strong>${intentIcon} ${enemy.intent.label}</strong>
+            <p>目标：${intentTarget}</p>
+            <p>预估：${intentForecast}</p>
+          </article>
+          <article class="battle-decision-card actor ${actor ? "" : "empty"}">
+            <small>当前操控</small>
+            <strong>${actor ? actor.name : "无可操控特工"}</strong>
+            <p>${actor ? `${getRoleLabel(actor.role)} · HP ${actor.hp}/${actor.hpMax} · 能量 ${actor.energy}` : "请先切换到可行动特工。"}</p>
+            <p>${battleRecommendationText}</p>
+          </article>
         </div>
-        ${renderIntentSequenceTrack(enemy, 4)}
+        <div class="chip-row battle-decision-strip">
+          <span class="chip battle-hud-chip ${intentThreatClass}">威胁 ${getThreatLabel(intentThreatKey)} · ${threatDirective}</span>
+          <span class="chip battle-hud-chip intent-phase-chip">${phaseReadout}</span>
+          ${
+            activeNodeOperation
+              ? `<span class="chip battle-hud-chip battle-hud-protocol">协议 ${activeNodeOperation.title}</span>`
+              : '<span class="chip battle-hud-chip">未检测到协议修正</span>'
+          }
+          ${
+            actor && actorStatusPreview.length > 0
+              ? actorStatusPreview
+                  .map((tag) => `<span class="chip battle-actor-status-chip">${tag}</span>`)
+                  .join("")
+              : ""
+          }
+        </div>
       </article>
 
-      ${renderBossBattleReadout(enemy)}
       ${renderBattleStage(
         stagedSquad,
         enemy,
@@ -4181,97 +4800,26 @@ function renderBattle() {
         intentTarget
       )}
 
-      <div class="card-grid battle-grid">
-        ${squad
-          .map((agent) => {
-            const selected = state.battle.selectedActorId === agent.id;
-            const statusTags = formatAgentStatus(agent);
-            const roleVisual = getRoleVisual(agent.role);
-            const selectedControlChip = selected
-              ? '<span class="chip actor-selected-chip">当前操控</span>'
-              : "";
-
-            return `
-              <article class="card unit-card agent-card role-${agent.role.toLowerCase()} ${selected ? "selected" : ""}" style="--role-accent:${roleVisual.color};">
-                <div class="unit-head">
-                  ${renderAgentPortrait(agent)}
-                  <div class="unit-head-copy">
-                    <h3>${agent.name}</h3>
-                    <p>${getRoleLabel(agent.role)}</p>
-                    <span class="mini-badge" style="--badge-accent:${roleVisual.color}">${roleVisual.icon}</span>
-                  </div>
-                </div>
-                <div class="stat-row">
-                  <span class="stat-pill">生命 ${agent.hp}/${agent.hpMax}</span>
-                  <span class="stat-pill">攻击 ${agent.atk}</span>
-                  <span class="stat-pill">能量 ${agent.energy}</span>
-                </div>
-                ${renderHpBar(agent.hp, agent.hpMax, "ally")}
-                ${renderEnergyCells(agent.energy)}
-                ${statusTags.length > 0 ? `<div class="chip-row">${statusTags
-                  .map((tag) => `<span class="chip">${tag}</span>`)
-                  .join("")}</div>` : '<p class="muted" style="margin-top:8px;">当前无状态效果。</p>'}
-                ${selectedControlChip ? `<div class="chip-row" style="margin-top:8px;">${selectedControlChip}</div>` : ""}
-                <p class="muted" style="margin-top:8px;">${agent.skill.title}: ${agent.skill.desc}</p>
-                <div class="row" style="margin-top:10px;">
-                  <button class="btn actor-select-btn ${selected ? "is-selected" : ""}" data-action="select-actor" data-agent-id="${agent.id}" ${actionLocked ? "disabled" : ""} title="${actionLocked ? actionLockReason || "结算处理中，稍后可切换操控。" : selected ? "当前操控中" : "切换为当前操控"}">${selected ? "操控中" : "切换操控"}</button>
-                </div>
-              </article>
-            `;
-          })
-          .join("")}
-
-        <article class="card enemy-card unit-card ${enemy.bossState ? "boss-unit-card" : ""}" style="--enemy-accent:${enemyVisual.color};">
-          <div class="unit-head enemy-head">
-            ${renderEnemyPortrait(enemy)}
-            <div class="unit-head-copy">
-              <h3>${enemy.name}</h3>
-              <p>${enemy.role}</p>
-            </div>
-          </div>
-          <div class="stat-row">
-            <span class="stat-pill">生命 ${enemy.hp}/${enemy.hpMax}</span>
-            <span class="stat-pill">攻击 ${enemy.atk}</span>
-          </div>
-          ${renderHpBar(enemy.hp, enemy.hpMax, "enemy")}
-          ${enemyStatusTags.length > 0 ? `<div class="chip-row">${enemyStatusTags
-            .map((tag) => `<span class="chip">${tag}</span>`)
-            .join("")}</div>` : '<p class="muted" style="margin-top:8px;">敌方当前无额外修正。</p>'}
-          ${
-            enemy.bossState && enemy.dossier.length > 0
-              ? `<p class="muted" style="margin-top:8px;">${enemy.dossier[enemy.bossState.phase - 1] || enemy.dossier[0]}</p>`
-              : ""
-          }
-        </article>
-      </div>
-
-      ${
-        state.battle.lastResolution
-          ? `
-        <article class="panel combat-summary screen-stack-panel-tight">
-          <h3>第 ${state.battle.lastResolution.turn} 回合复盘</h3>
-          <div class="impact-grid">
-            <div>
-              <small class="muted">我方输出</small>
-              ${renderImpactBar(state.battle.lastResolution.playerDamage, "ally")}
-            </div>
-            <div>
-              <small class="muted">敌方压制</small>
-              ${renderImpactBar(state.battle.lastResolution.enemyDamage, "enemy")}
-            </div>
-          </div>
-          <div class="chip-row">
-            <span class="chip ${`intent-${state.battle.lastResolution.intentThreat || "medium"}`}">
-              敌方威胁 ${getThreatLabel(state.battle.lastResolution.intentThreat || "medium")}
-            </span>
-            <span class="chip">行动：${state.battle.lastResolution.actionLabel || "常规行动"}</span>
-          </div>
-          <p>${state.battle.lastResolution.player}</p>
-          <p>${state.battle.lastResolution.enemy}</p>
-        </article>
-      `
-          : ""
-      }
+      <article class="panel panel-visual battle-actor-switcher">
+        <div class="row spread">
+          <h3>操控切换</h3>
+          <span class="chip">${actor ? `技能耗能 ${skillCost}` : "操作锁定"}</span>
+        </div>
+        <p class="muted battle-controller-muted">${actorHint}</p>
+        <p class="muted battle-controller-hotkeys">键盘快捷键：A 攻击 · D 防御 · S 技能 · B 爆发 · R 切换操控</p>
+        <div class="battle-actor-strip">
+          ${squad
+            .map((agent) => {
+              const selected = state.battle.selectedActorId === agent.id;
+              return `
+                <button class="btn battle-actor-pill ${selected ? "is-selected" : ""}" data-action="select-actor" data-agent-id="${agent.id}" ${actionLocked ? "disabled" : ""} title="${actionLocked ? actionLockReason || "结算处理中，稍后可切换操控。" : selected ? "当前操控中" : "切换为当前操控"}">
+                  ${agent.name}
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+      </article>
 
       ${
         state.battle.pendingFinish
@@ -4293,24 +4841,97 @@ function renderBattle() {
           : ""
       }
 
-      <div class="actions ${actionFlowClass}">
-        <button class="btn primary action-btn attack ${isRecentAction("attack") ? "recent" : ""}" data-action="do-attack" ${basicActionDisabled ? "disabled" : ""} ${basicDisableReason ? `title="${basicDisableReason}"` : ""}>攻击（+1 能量）</button>
-        <button class="btn action-btn guard ${isRecentAction("defend") ? "recent" : ""}" data-action="do-defend" ${basicActionDisabled ? "disabled" : ""} ${basicDisableReason ? `title="${basicDisableReason}"` : ""}>防御（+1 能量）</button>
-        <button class="btn action-btn skill ${isRecentAction("skill") ? "recent" : ""}" data-action="do-skill" ${skillDisabled ? "disabled" : ""} ${skillDisableReason ? `title="${skillDisableReason}"` : ""}>${skillActionLabel}</button>
-        <button class="btn action-btn burst ${isRecentAction("burst") ? "recent" : ""}" data-action="do-burst" ${burstDisabled ? "disabled" : ""} ${burstDisableReason ? `title="${burstDisableReason}"` : ""}>同步爆发（-3 能量）</button>
+      ${renderBattleSecondaryPanel(stagedSquad, enemy, state.battle.selectedActorId, intentTarget)}
+
+      <div class="detail-accordion">
+        <details class="inline-detail-block">
+          <summary>展开敌方意图详情</summary>
+          <div class="inline-detail-content">
+            <article class="intent-card panel-visual intent-card-${enemy.intent.threat || "medium"}">
+              <div class="row spread">
+                <h3>敌方意图：${enemy.intent.label}</h3>
+                <span class="intent-icon-badge">${intentIcon}</span>
+              </div>
+              <p>${enemy.intent.desc}</p>
+              <p class="intent-callout">即将执行：<strong>${enemy.intent.label}</strong> → <strong>${intentTarget}</strong></p>
+              ${renderIntentSequenceTrack(enemy, 4)}
+              ${
+                enemy.bossState
+                  ? `<div style="margin-top:10px;">${renderBossBattleReadout(enemy)}</div>`
+                  : ""
+              }
+            </article>
+          </div>
+        </details>
+
+        ${
+          state.battle.lastResolution
+            ? `
+        <details class="inline-detail-block">
+          <summary>展开最近回合复盘</summary>
+          <div class="inline-detail-content">
+            <article class="panel combat-summary screen-stack-panel-tight">
+          <h3>第 ${state.battle.lastResolution.turn} 回合复盘</h3>
+          <div class="impact-grid">
+            <div>
+              <small class="muted">我方输出</small>
+              ${renderImpactBar(state.battle.lastResolution.playerDamage, "ally")}
+            </div>
+            <div>
+              <small class="muted">敌方压制</small>
+              ${renderImpactBar(state.battle.lastResolution.enemyDamage, "enemy")}
+            </div>
+          </div>
+          <div class="chip-row">
+            <span class="chip ${`intent-${state.battle.lastResolution.intentThreat || "medium"}`}">
+              敌方威胁 ${getThreatLabel(state.battle.lastResolution.intentThreat || "medium")}
+            </span>
+            <span class="chip">行动：${state.battle.lastResolution.actionLabel || "常规行动"}</span>
+          </div>
+          <p>${state.battle.lastResolution.player}</p>
+          <p>${state.battle.lastResolution.enemy}</p>
+            </article>
+          </div>
+        </details>
+      `
+            : ""
+        }
       </div>
 
-      <p class="battle-controller-readout">当前操控：<strong>${actor ? actor.name : "无"}</strong></p>
-      <p class="battle-flow-hint ${actionFlowClass}">${flowHint}</p>
-      ${renderDirectivePanel("指令栈")}
+      <div class="screen-bottom-action-bar battle-action-dock">
+        <div class="battle-dock-topline">
+          <p class="battle-controller-readout">当前操控：<strong>${actor ? actor.name : "无"}</strong></p>
+          <span class="battle-dock-recommend ${battleRecommendedAction}">${battleRecommendationLabel}</span>
+        </div>
+        <p class="battle-flow-hint ${actionFlowClass}">${flowHint}</p>
+        <button
+          class="btn primary battle-recommend-cta ${battleRecommendedAction}"
+          data-action="do-recommended-action"
+          data-recommended-action="${battleRecommendedAction}"
+          ${recommendationDisabled ? "disabled" : ""}
+          ${recommendationDisableReason ? `title="${recommendationDisableReason}"` : ""}
+        >
+          ${recommendationButtonLabel}
+        </button>
+        <div class="actions ${actionFlowClass}">
+          <button class="btn primary action-btn attack ${isRecentAction("attack") ? "recent" : ""} ${battleRecommendedAction === "attack" ? "is-recommended" : ""}" data-action="do-attack" ${basicActionDisabled ? "disabled" : ""} ${basicDisableReason ? `title="${basicDisableReason}" aria-label="攻击，${basicDisableReason}"` : 'aria-label="攻击，获得 1 点能量"'}>攻击（+1 能量）</button>
+          <button class="btn action-btn guard ${isRecentAction("defend") ? "recent" : ""} ${battleRecommendedAction === "defend" ? "is-recommended" : ""}" data-action="do-defend" ${basicActionDisabled ? "disabled" : ""} ${basicDisableReason ? `title="${basicDisableReason}" aria-label="防御，${basicDisableReason}"` : 'aria-label="防御，获得 1 点能量"'}>防御（+1 能量）</button>
+          <button class="btn action-btn skill ${isRecentAction("skill") ? "recent" : ""} ${battleRecommendedAction === "skill" ? "is-recommended" : ""}" data-action="do-skill" ${skillDisabled ? "disabled" : ""} ${skillDisableReason ? `title="${skillDisableReason}" aria-label="${skillActionLabel}，${skillDisableReason}"` : `aria-label="${skillActionLabel}"`}>${skillActionLabel}</button>
+          <button class="btn action-btn burst ${isRecentAction("burst") ? "recent" : ""} ${battleRecommendedAction === "burst" ? "is-recommended" : ""}" data-action="do-burst" ${burstDisabled ? "disabled" : ""} ${burstDisableReason ? `title="${burstDisableReason}" aria-label="同步爆发，${burstDisableReason}"` : 'aria-label="同步爆发，消耗 3 点能量"'}>同步爆发（-3 能量）</button>
+        </div>
+      </div>
     </section>
   `;
 }
-
 function renderReward() {
   if (!state.run) {
     return;
   }
+  if (!state.ui) {
+    state.ui = {};
+  }
+
+  const now = Date.now();
   const nextNode = NODE_PLAN[state.run.nodeIndex + 1] || null;
   const hasNextNode = Boolean(nextNode);
   const nextNodeNum = clamp(state.run.nodeIndex + 2, 1, state.run.maxNode);
@@ -4318,7 +4939,78 @@ function renderReward() {
   const rewardHintText = hasNextNode
     ? `安装 1 项指令后推进到节点 ${nextNodeNum}。`
     : "当前为终局结算阶段。";
-  const screenClass = getScreenSectionClass("reward-screen");
+  const hasRewards = state.pendingRewards.length > 0;
+  const rewardInstallingActive = Boolean(
+    state.ui.rewardInstallingId &&
+    state.ui.rewardInstallingUntil &&
+    state.ui.rewardInstallingUntil > now
+  );
+  if (state.ui.rewardInstallingId && !rewardInstallingActive && !state.ui.rewardInstallTimerId) {
+    state.ui.rewardInstallingId = null;
+    state.ui.rewardInstallingUntil = 0;
+  }
+  const installingRewardId = rewardInstallingActive ? state.ui.rewardInstallingId : "";
+
+  if (hasRewards && !rewardInstallingActive) {
+    const selectedStillValid = Boolean(
+      state.ui.selectedRewardId &&
+      state.pendingRewards.some((reward) => reward.id === state.ui.selectedRewardId)
+    );
+    if (!selectedStillValid) {
+      state.ui.selectedRewardId = null;
+    }
+  } else {
+    state.ui.selectedRewardId = null;
+  }
+
+  const selectedReward = hasRewards
+    ? state.pendingRewards.find((reward) => reward.id === state.ui.selectedRewardId) || null
+    : null;
+  const activeRewardId =
+    (rewardInstallingActive && installingRewardId) ||
+    (selectedReward ? selectedReward.id : "");
+  const activeReward = hasRewards
+    ? state.pendingRewards.find((reward) => reward.id === activeRewardId) || null
+    : null;
+  const stepPickClass = rewardInstallingActive || selectedReward ? "done" : "current";
+  const stepConfirmClass = rewardInstallingActive
+    ? "installing"
+    : selectedReward
+      ? "ready"
+      : "";
+  const heroToneClass = !hasRewards
+    ? "is-empty"
+    : rewardInstallingActive
+      ? "is-installing"
+      : selectedReward
+        ? "is-ready"
+        : "is-idle";
+  const heroTitle = !hasRewards
+    ? "未解码到可安装指令"
+    : rewardInstallingActive && activeReward
+      ? `正在安装：${activeReward.title}`
+      : selectedReward
+        ? `已锁定：${selectedReward.title}`
+        : "选择 1 项指令";
+  const heroDesc = !hasRewards
+    ? hasNextNode
+      ? `本节点未掉落指令，将按基础配置推进至节点 ${nextNodeNum}。`
+      : "本节点未掉落指令，将按基础配置进入结算。"
+    : rewardInstallingActive && activeReward
+      ? activeReward.desc
+      : selectedReward
+        ? selectedReward.desc
+        : "优先挑能立刻改变节奏的一项，确认后自动推进下一节点。";
+  const heroSubline = rewardInstallingActive
+    ? hasNextNode
+      ? `链路写入中，完成后将自动推进至节点 ${nextNodeNum}。`
+      : "链路写入中，完成后将进入终局结算。"
+    : selectedReward
+      ? hasNextNode
+        ? `确认安装后将推进至节点 ${nextNodeNum}。`
+        : "确认安装后将进入终局结算。"
+      : "先点选，再到底部确认安装。";
+  const screenClass = getScreenSectionClass("reward-screen screen-with-bottom-dock");
 
   screenRoot.innerHTML = `
     <section class="${screenClass}">
@@ -4330,48 +5022,48 @@ function renderReward() {
             ${renderStageBadge(nextNode ? nextNode.danger : null, "终局")}
           </div>
         </div>
-        <p>进入下一节点前，选择并安装 1 项升级指令。候选指令将按序解码。</p>
+        <p>先点选强化，再确认安装。流程会自动推进，不需要额外操作。</p>
+        <div class="chip-row reward-flow-strip">
+          <span class="chip reward-flow-chip ${stepPickClass}">步骤 1：点选指令</span>
+          <span class="chip reward-flow-chip ${stepConfirmClass}">${rewardInstallingActive ? "步骤 2：安装中" : "步骤 2：确认安装"}</span>
+        </div>
         ${renderStageProgress(state.run.nodeIndex + 1, state.run.nodeIndex + 1)}
       </article>
-      ${renderOuterLoopRail("reward", {
-        phaseText: `节点 ${state.run.nodeIndex + 1} 已清除`,
-        hintText: rewardHintText,
-      })}
-      ${
-        battleResult
-          ? `
-      <article class="panel panel-visual reward-bridge">
+      <article class="panel panel-visual reward-impact-hero ${heroToneClass}">
         <div class="row spread">
-          <h3>战场回执</h3>
-          <span class="chip">节点 ${battleResult.nodeIndex} · ${battleResult.nodeLabel}</span>
+          <h3>${heroTitle}</h3>
+          <span class="chip">${activeReward ? getRewardVisual(activeReward.id).badge : "待选择"}</span>
         </div>
-        <p>${battleResult.enemyName} 已被清除，当前流程进入奖励解码。</p>
-        ${renderFlowChain(battleResult.nodeIndex, Math.min(state.run.maxNode, battleResult.nodeIndex + 1), "")}
-        <div class="chip-row">
-          ${battleResult.actorName ? `<span class="chip">执行者 ${battleResult.actorName}</span>` : ""}
-          <span class="chip">终结动作：${battleResult.actionLabel}</span>
-          <span class="chip">终结伤害 ${battleResult.playerDamage}</span>
-          <span class="chip">战后修复 ${battleResult.recoveredHp > 0 ? `+${battleResult.recoveredHp}` : "0"}</span>
-        </div>
+        <p>${heroDesc}</p>
+        <p class="reward-impact-subline">${heroSubline}</p>
       </article>
-      `
-          : ""
-      }
-      <div class="reward-grid">
+      <div class="reward-grid reward-choice-grid">
         ${
-          state.pendingRewards.length === 0
+          !hasRewards
             ? `
               <article class="panel panel-visual reward-empty">
                 <p class="muted">当前未解码到可安装指令。</p>
                 <p class="muted">${hasNextNode ? "将按基础配置推进至下一节点。" : "将按基础配置进入行动结算。"}</p>
-                <button class="btn primary" data-action="continue-without-reward">按基础配置继续</button>
               </article>
             `
             : state.pendingRewards
                 .map((reward, index) => {
                   const visual = getRewardVisual(reward.id);
+                  const selected = reward.id === state.ui.selectedRewardId;
+                  const installing = rewardInstallingActive && reward.id === installingRewardId;
+                  const active = selected || installing;
+                  const locked = rewardInstallingActive && !installing;
                   return `
-              <article class="card reward-card panel-visual reward-reveal-card" style="--reward-accent:${visual.color}; --reward-reveal-delay:${index * REWARD_REVEAL_STAGGER_MS}ms;">
+              <article
+                class="card reward-card panel-visual reward-reveal-card reward-choice-card ${active ? "selected" : ""} ${installing ? "installing" : ""} ${locked ? "locked" : ""}"
+                style="--reward-accent:${visual.color}; --reward-reveal-delay:${index * REWARD_REVEAL_STAGGER_MS}ms;"
+                data-action="select-reward-candidate"
+                data-reward-id="${reward.id}"
+                role="button"
+                tabindex="${rewardInstallingActive ? "-1" : "0"}"
+                aria-disabled="${rewardInstallingActive ? "true" : "false"}"
+                aria-pressed="${active ? "true" : "false"}"
+              >
                 <div class="reward-head">
                   ${renderRewardGlyph(reward.id)}
                   <div>
@@ -4379,20 +5071,77 @@ function renderReward() {
                     <p class="muted">${visual.tone}</p>
                   </div>
                 </div>
-                <p>${reward.desc}</p>
                 <div class="chip-row">
                   <span class="chip">序列 ${index + 1}</span>
                   <span class="chip">${visual.badge}</span>
                   <span class="chip">${reward.persistent ? "可带入后续节点" : "即时生效"}</span>
+                  ${installing ? '<span class="chip reward-selected-chip installing">安装中</span>' : selected ? '<span class="chip reward-selected-chip">当前选择</span>' : ""}
                 </div>
-                <button class="btn primary" data-action="pick-reward" data-reward-id="${reward.id}">安装指令</button>
+                <p class="muted">${reward.desc}</p>
+                <p class="reward-choice-cta ${active ? "selected" : ""} ${installing ? "installing" : ""}">
+                  ${installing ? "安装中，链路写入..." : selected ? "已锁定，再点一次可取消" : "点击卡片选择此指令"}
+                </p>
+                <div class="reward-preview-row">
+                  <span class="reward-preview-label">装上后会发生什么</span>
+                  <strong>${installing ? "本次安装正在生效" : reward.persistent ? "后续节点持续生效" : "立即改变当前战局"}</strong>
+                </div>
+                ${
+                  active
+                    ? `
+                  <div class="reward-choice-expanded">
+                    <p><strong>安装后：</strong>${reward.desc}</p>
+                    <p><strong>生效范围：</strong>${reward.persistent ? "可带入后续节点" : "当前阶段即时生效"}</p>
+                    <p class="muted">${installing ? "正在注入，完成后自动推进。" : hasNextNode ? `确认后自动推进至节点 ${nextNodeNum}。` : "确认后将进入终局结算。"}</p>
+                  </div>
+                `
+                    : ""
+                }
+                ${installing ? '<span class="reward-install-progress" aria-hidden="true"><span></span></span>' : ""}
               </article>
             `;
                 })
                 .join("")
         }
       </div>
-      ${renderDirectivePanel("当前指令栈")}
+      ${renderRewardSecondaryPanel(battleResult, rewardHintText)}
+      <div class="screen-bottom-action-bar reward-action-dock">
+        <div class="reward-dock-topline">
+          <span class="reward-dock-step">${rewardInstallingActive ? "安装进程 1 / 1" : "1 / 1 安装确认"}</span>
+          ${
+            rewardInstallingActive && activeReward
+              ? `<span class="reward-dock-selected installing">注入 ${activeReward.title}</span>`
+              : selectedReward
+                ? `<span class="reward-dock-selected">已选 ${selectedReward.title}</span>`
+                : `<span class="reward-dock-selected pending">待选择</span>`
+          }
+        </div>
+        <p class="bottom-action-info">
+          ${
+            hasRewards
+              ? rewardInstallingActive && activeReward
+                ? hasNextNode
+                  ? `正在安装：${activeReward.title}。完成后将自动推进至节点 ${nextNodeNum}。`
+                  : `正在安装：${activeReward.title}。完成后将进入终局结算。`
+                : selectedReward
+                  ? hasNextNode
+                    ? `已选：${selectedReward.title}。确认后将推进至节点 ${nextNodeNum}；再次点卡片可取消。`
+                    : `已选：${selectedReward.title}。确认后将进入终局结算；再次点卡片可取消。`
+                  : "请选择 1 项指令后再确认安装。"
+              : hasNextNode
+                ? "当前无可安装指令，可按基础配置继续。"
+                : "当前无可安装指令，将进入终局结算。"
+          }
+        </p>
+        <div class="bottom-action-buttons">
+          ${
+            hasRewards
+              ? rewardInstallingActive
+                ? `<button class="btn primary" disabled>安装中...</button>`
+                : `<button class="btn primary" data-action="confirm-reward" ${selectedReward ? "" : "disabled"}>${selectedReward ? `安装：${selectedReward.title}` : "先选择 1 项指令"}</button>`
+              : '<button class="btn primary" data-action="continue-without-reward">按基础配置继续</button>'
+          }
+        </div>
+      </div>
     </section>
   `;
 }
@@ -4472,8 +5221,38 @@ function render() {
   const uiState = state.ui || {
     lastRenderedScreen: "",
     screenTransitionPending: false,
+    battleSecondaryTab: "status",
+    rewardSecondaryTab: "build",
+    selectedRewardId: null,
+    rewardInstallingId: null,
+    rewardInstallingUntil: 0,
+    rewardInstallTimerId: null,
   };
   state.ui = uiState;
+  if (!uiState.battleSecondaryTab || !BATTLE_SECONDARY_TABS[uiState.battleSecondaryTab]) {
+    uiState.battleSecondaryTab = "status";
+  }
+  if (!uiState.rewardSecondaryTab || !REWARD_SECONDARY_TABS[uiState.rewardSecondaryTab]) {
+    uiState.rewardSecondaryTab = "build";
+  }
+  if (typeof uiState.selectedRewardId === "undefined") {
+    uiState.selectedRewardId = null;
+  }
+  if (typeof uiState.rewardInstallingId === "undefined") {
+    uiState.rewardInstallingId = null;
+  }
+  if (typeof uiState.rewardInstallingUntil === "undefined") {
+    uiState.rewardInstallingUntil = 0;
+  }
+  if (typeof uiState.rewardInstallTimerId === "undefined") {
+    uiState.rewardInstallTimerId = null;
+  }
+  if (typeof uiState.titleHelpOpen === "undefined") {
+    uiState.titleHelpOpen = false;
+  }
+  if (typeof uiState.titleRosterOpen === "undefined") {
+    uiState.titleRosterOpen = false;
+  }
   const screenChanged = uiState.lastRenderedScreen !== state.screen;
   uiState.screenTransitionPending = screenChanged;
   if (screenChanged) {
@@ -4509,15 +5288,39 @@ function render() {
 }
 
 document.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-action]");
-  if (!button) {
+  const actionTarget = event.target.closest("[data-action]");
+  if (!actionTarget) {
     return;
   }
 
-  const action = button.dataset.action;
+  const action = actionTarget.dataset.action;
 
   if (action === "start-run") {
     startRun();
+  }
+  if (action === "toggle-title-help") {
+    if (state.screen === "title") {
+      if (!state.ui) {
+        state.ui = {};
+      }
+      state.ui.titleHelpOpen = !state.ui.titleHelpOpen;
+      if (state.ui.titleHelpOpen) {
+        state.ui.titleRosterOpen = false;
+      }
+      render();
+    }
+  }
+  if (action === "toggle-title-roster") {
+    if (state.screen === "title") {
+      if (!state.ui) {
+        state.ui = {};
+      }
+      state.ui.titleRosterOpen = !state.ui.titleRosterOpen;
+      if (state.ui.titleRosterOpen) {
+        state.ui.titleHelpOpen = false;
+      }
+      render();
+    }
   }
   if (action === "abort-run") {
     abortRun();
@@ -4526,16 +5329,48 @@ document.addEventListener("click", (event) => {
     deployBattle();
   }
   if (action === "pick-node-operation") {
-    selectNodeOperation(button.dataset.operationId);
+    selectNodeOperation(actionTarget.dataset.operationId);
   }
   if (action === "select-actor") {
     if (state.battle) {
-      const nextActorId = button.dataset.agentId;
+      const nextActorId = actionTarget.dataset.agentId;
       if (!nextActorId || state.battle.selectedActorId === nextActorId) {
         return;
       }
       state.battle.selectedActorId = nextActorId;
       addBattleUnitEffect("ally", nextActorId, "status");
+      render();
+    }
+  }
+  if (action === "select-battle-secondary-tab") {
+    if (state.screen === "battle") {
+      const nextTab = actionTarget.dataset.tab || "";
+      if (!BATTLE_SECONDARY_TABS[nextTab]) {
+        return;
+      }
+      if (!state.ui) {
+        state.ui = {};
+      }
+      if (state.ui.battleSecondaryTab === nextTab) {
+        return;
+      }
+      state.ui.battleSecondaryTab = nextTab;
+      render();
+    }
+  }
+  if (action === "select-reward-secondary-tab") {
+    if (state.screen === "reward") {
+      const nextTab = actionTarget.dataset.tab || "";
+      if (!REWARD_SECONDARY_TABS[nextTab]) {
+        return;
+      }
+      if (!state.ui) {
+        state.ui = {};
+      }
+      if (state.ui.rewardSecondaryTab === nextTab) {
+        return;
+      }
+      state.ui.rewardSecondaryTab = nextTab;
       render();
     }
   }
@@ -4551,14 +5386,100 @@ document.addEventListener("click", (event) => {
   if (action === "do-burst") {
     performAction("burst");
   }
-  if (action === "pick-reward") {
-    applyReward(button.dataset.rewardId);
+  if (action === "do-recommended-action") {
+    if (state.screen === "battle") {
+      triggerRecommendedBattleAction(actionTarget.dataset.recommendedAction || "");
+    }
+  }
+  if (action === "select-reward-candidate") {
+    selectRewardCandidate(actionTarget.dataset.rewardId);
+  }
+  if (action === "confirm-reward") {
+    if (state.screen === "reward" && state.ui && state.ui.selectedRewardId) {
+      const selectedId = state.ui.selectedRewardId;
+      const exists = state.pendingRewards.some((reward) => reward.id === selectedId);
+      if (exists) {
+        applyReward(selectedId);
+      }
+    }
   }
   if (action === "continue-without-reward") {
     continueWithoutReward();
   }
   if (action === "to-title") {
     abortRun();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  const targetElement = event.target instanceof Element ? event.target : null;
+
+  const rewardCard = targetElement
+    ? targetElement.closest('.reward-choice-card[data-action="select-reward-candidate"]')
+    : null;
+  if (rewardCard && state.screen === "reward") {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    event.preventDefault();
+    selectRewardCandidate(rewardCard.dataset.rewardId);
+    return;
+  }
+
+  if (state.screen === "reward" && (event.key === "Enter" || event.key === " ")) {
+    if (
+      targetElement &&
+      (targetElement.matches("button[data-action='confirm-reward']") ||
+        targetElement.closest("button[data-action='confirm-reward']"))
+    ) {
+      event.preventDefault();
+      if (state.ui && state.ui.selectedRewardId) {
+        const exists = state.pendingRewards.some((reward) => reward.id === state.ui.selectedRewardId);
+        if (exists) {
+          applyReward(state.ui.selectedRewardId);
+        }
+      }
+      return;
+    }
+  }
+
+  if (state.screen === "battle" && !event.altKey && !event.metaKey && !event.ctrlKey) {
+    const key = event.key.toLowerCase();
+    if (key === "a") {
+      event.preventDefault();
+      performAction("attack");
+      return;
+    }
+    if (key === "d") {
+      event.preventDefault();
+      performAction("defend");
+      return;
+    }
+    if (key === "s") {
+      event.preventDefault();
+      performAction("skill");
+      return;
+    }
+    if (key === "b") {
+      event.preventDefault();
+      performAction("burst");
+      return;
+    }
+    if (key === "r") {
+      event.preventDefault();
+      if (!state.battle) {
+        return;
+      }
+      const actorIds = getAliveAgents(state.run ? state.run.squadIds : []).map((agent) => agent.id);
+      if (actorIds.length === 0) {
+        return;
+      }
+      const currentIndex = actorIds.indexOf(state.battle.selectedActorId);
+      const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % actorIds.length : 0;
+      state.battle.selectedActorId = actorIds[nextIndex];
+      render();
+    }
   }
 });
 

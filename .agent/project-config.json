@@ -1,0 +1,13 @@
+{
+  "commands": {
+    "smoke": [
+      "python3 - <<'PY'\nfrom pathlib import Path\nfor p in ['index.html','styles.css','app.js','README.md']:\n    path = Path(p)\n    assert path.exists(), f'missing {p}'\n    print(f'OK {p} {path.stat().st_size}')\nPY"
+    ]
+  },
+  "artifacts": [
+    "index.html",
+    "styles.css",
+    "app.js",
+    "README.md"
+  ]
+}
